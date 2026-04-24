@@ -1,3 +1,5 @@
+# mysh_core holds the shell internals so unit tests can link against the same
+# code as the interactive mysh executable.
 add_library(mysh_core STATIC
         builtins.c
         env.c
@@ -5,6 +7,7 @@ add_library(mysh_core STATIC
         jobs.c
         lexer.c
         parser.c
+        shell.c
         signals.c
         util.c
 )

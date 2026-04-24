@@ -1,8 +1,6 @@
-//
-// Created by Harrison Stephan on 4/20/26.
-//
-
 #ifndef MYSH_BUILTINS_H
 #define MYSH_BUILTINS_H
+
+/* Public interface for built-in shell commands such as cd, pwd, and exit. */
 
 #endif //MYSH_BUILTINS_H
