@@ -18,6 +18,7 @@ add_library(tide_core
     src/app.c
     src/buffer.c
     src/editor.c
+    src/editor_render.c
 )
 
 target_include_directories(tide_core PUBLIC include)
