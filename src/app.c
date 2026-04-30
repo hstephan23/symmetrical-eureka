@@ -195,6 +195,14 @@ static int command_matches(const char *command, const char *a, const char *b)
     return strcmp(command, a) == 0 || strcmp(command, b) == 0;
 }
 
+static const char *skip_command_spaces(const char *text)
+{
+    while (*text == ' ' || *text == '\t') {
+        text++;
+    }
+    return text;
+}
+
 TideStatus tide_app_execute_editor_command(TideEditor *editor, const char *command, int *quit)
 {
     *quit = 0;
@@ -217,6 +225,19 @@ TideStatus tide_app_execute_editor_command(TideEditor *editor, const char *comma
             *quit = 1;
         }
         return TIDE_OK;
+    }
+
+    if (strncmp(command, "find", 4) == 0 && (command[4] == '\0' || command[4] == ' ' || command[4] == '\t')) {
+        const char *query = skip_command_spaces(command + 4);
+        return tide_editor_find(editor, query);
+    }
+
+    if (strcmp(command, "next") == 0) {
+        return tide_editor_find_next(editor);
+    }
+
+    if (strcmp(command, "prev") == 0) {
+        return tide_editor_find_previous(editor);
     }
 
     char message[sizeof(editor->status)];

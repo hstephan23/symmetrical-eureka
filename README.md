@@ -67,4 +67,7 @@ Command prompt:
 - `write`, `save`, or `w` saves.
 - `quit` or `q` quits.
 - `wq` saves and quits.
+- `find <text>` searches in the current file.
+- `next` jumps to the next match.
+- `prev` jumps to the previous match.
 - Escape or Ctrl-P closes the prompt.
