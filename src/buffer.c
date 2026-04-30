@@ -1,7 +1,12 @@
 #include "tide/buffer.h"
 
+#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+static TideStatus insert_empty_line(TideBuffer *buffer, size_t index);
 
 static TideStatus line_init(TideLine *line)
 {
@@ -77,6 +82,26 @@ static TideStatus line_append_bytes(TideLine *line, const char *data, size_t len
     line->length += length;
     line->data[line->length] = '\0';
     return TIDE_OK;
+}
+
+static char *copy_string(const char *value)
+{
+    size_t length = strlen(value);
+    char *copy = malloc(length + 1);
+    if (copy == NULL) {
+        return NULL;
+    }
+    memcpy(copy, value, length + 1);
+    return copy;
+}
+
+static TideStatus reset_to_empty(TideBuffer *buffer)
+{
+    for (size_t i = 0; i < buffer->line_count; ++i) {
+        line_free(&buffer->lines[i]);
+    }
+    buffer->line_count = 0;
+    return insert_empty_line(buffer, 0);
 }
 
 static TideStatus ensure_line_capacity(TideBuffer *buffer, size_t needed)
@@ -254,4 +279,196 @@ size_t tide_buffer_line_length(const TideBuffer *buffer, size_t line)
         return 0;
     }
     return buffer->lines[line].length;
+}
+
+TideStatus tide_buffer_set_path(TideBuffer *buffer, const char *path)
+{
+    char *path_copy = copy_string(path);
+    if (path_copy == NULL) {
+        return TIDE_ERR_ALLOC;
+    }
+
+    free(buffer->path);
+    buffer->path = path_copy;
+    return TIDE_OK;
+}
+
+static TideStatus append_loaded_line(TideBuffer *buffer, const char *start, size_t length)
+{
+    TideStatus status;
+
+    if (buffer->line_count == 0) {
+        status = insert_empty_line(buffer, 0);
+        if (status != TIDE_OK) {
+            return status;
+        }
+    } else if (buffer->lines[buffer->line_count - 1].length > 0) {
+        status = insert_empty_line(buffer, buffer->line_count);
+        if (status != TIDE_OK) {
+            return status;
+        }
+    }
+
+    TideLine *line = &buffer->lines[buffer->line_count - 1];
+    return line_append_bytes(line, start, length);
+}
+
+static TideStatus load_bytes(TideBuffer *buffer, const char *data, size_t length)
+{
+    TideStatus status = reset_to_empty(buffer);
+    if (status != TIDE_OK) {
+        return status;
+    }
+    buffer->lines[0].length = 0;
+    buffer->lines[0].data[0] = '\0';
+
+    size_t line_start = 0;
+    for (size_t i = 0; i < length; ++i) {
+        if (data[i] == '\n') {
+            status = append_loaded_line(buffer, data + line_start, i - line_start);
+            if (status != TIDE_OK) {
+                return status;
+            }
+            line_start = i + 1;
+        }
+    }
+
+    if (line_start < length) {
+        status = append_loaded_line(buffer, data + line_start, length - line_start);
+        if (status != TIDE_OK) {
+            return status;
+        }
+    }
+
+    if (buffer->line_count == 0) {
+        return insert_empty_line(buffer, 0);
+    }
+
+    return TIDE_OK;
+}
+
+TideStatus tide_buffer_load_file(TideBuffer *buffer, const char *path)
+{
+    TideStatus status = tide_buffer_init(buffer);
+    if (status != TIDE_OK) {
+        return status;
+    }
+
+    status = tide_buffer_set_path(buffer, path);
+    if (status != TIDE_OK) {
+        tide_buffer_free(buffer);
+        return status;
+    }
+
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) {
+        if (errno == ENOENT) {
+            buffer->dirty = 0;
+            return TIDE_OK;
+        }
+        tide_buffer_free(buffer);
+        return TIDE_ERR_IO;
+    }
+
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        tide_buffer_free(buffer);
+        return TIDE_ERR_IO;
+    }
+
+    long file_size = ftell(file);
+    if (file_size < 0) {
+        fclose(file);
+        tide_buffer_free(buffer);
+        return TIDE_ERR_IO;
+    }
+
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        tide_buffer_free(buffer);
+        return TIDE_ERR_IO;
+    }
+
+    char *data = malloc((size_t)file_size + 1);
+    if (data == NULL) {
+        fclose(file);
+        tide_buffer_free(buffer);
+        return TIDE_ERR_ALLOC;
+    }
+
+    size_t nread = fread(data, 1, (size_t)file_size, file);
+    fclose(file);
+    if (nread != (size_t)file_size) {
+        free(data);
+        tide_buffer_free(buffer);
+        return TIDE_ERR_IO;
+    }
+    data[nread] = '\0';
+
+    status = load_bytes(buffer, data, nread);
+    free(data);
+    if (status != TIDE_OK) {
+        tide_buffer_free(buffer);
+        return status;
+    }
+
+    buffer->dirty = 0;
+    return TIDE_OK;
+}
+
+static TideStatus write_buffer(FILE *file, const TideBuffer *buffer)
+{
+    for (size_t i = 0; i < buffer->line_count; ++i) {
+        TideLine line = buffer->lines[i];
+        if (line.length > 0 && fwrite(line.data, 1, line.length, file) != line.length) {
+            return TIDE_ERR_IO;
+        }
+        if (i + 1 < buffer->line_count && fputc('\n', file) == EOF) {
+            return TIDE_ERR_IO;
+        }
+    }
+    return TIDE_OK;
+}
+
+TideStatus tide_buffer_save(TideBuffer *buffer)
+{
+    if (buffer->path == NULL) {
+        return TIDE_ERR_INVALID;
+    }
+
+    size_t path_length = strlen(buffer->path);
+    char *temp_path = malloc(path_length + 5);
+    if (temp_path == NULL) {
+        return TIDE_ERR_ALLOC;
+    }
+    memcpy(temp_path, buffer->path, path_length);
+    memcpy(temp_path + path_length, ".tmp", 5);
+
+    FILE *file = fopen(temp_path, "wb");
+    if (file == NULL) {
+        free(temp_path);
+        return TIDE_ERR_IO;
+    }
+
+    TideStatus status = write_buffer(file, buffer);
+    if (status == TIDE_OK && fflush(file) != 0) {
+        status = TIDE_ERR_IO;
+    }
+    if (fclose(file) != 0 && status == TIDE_OK) {
+        status = TIDE_ERR_IO;
+    }
+
+    if (status == TIDE_OK && rename(temp_path, buffer->path) != 0) {
+        status = TIDE_ERR_IO;
+    }
+
+    if (status != TIDE_OK) {
+        unlink(temp_path);
+        free(temp_path);
+        return status;
+    }
+
+    free(temp_path);
+    buffer->dirty = 0;
+    return TIDE_OK;
 }
