@@ -72,11 +72,50 @@ static void test_unknown_command_stays_open_and_sets_status(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_find_command_moves_cursor(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'a') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'b') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'a') == TIDE_OK);
+    editor.cursor = (TideBufferPosition){0, 1};
+
+    TIDE_ASSERT(tide_app_execute_editor_command(&editor, "find a", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(editor.cursor.line == 0);
+    TIDE_ASSERT(editor.cursor.column == 2);
+    tide_buffer_free(&buffer);
+}
+
+static void test_next_without_search_sets_status(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+
+    TIDE_ASSERT(tide_app_execute_editor_command(&editor, "next", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT_STR_EQ(editor.status, "no active search");
+    tide_buffer_free(&buffer);
+}
+
 int main(void)
 {
     test_demo_render_contains_title_and_status();
     test_editor_render_demo_contains_file_text();
     test_write_command_saves_buffer();
     test_unknown_command_stays_open_and_sets_status();
+    test_find_command_moves_cursor();
+    test_next_without_search_sets_status();
     return 0;
 }
