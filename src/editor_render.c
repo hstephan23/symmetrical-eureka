@@ -24,6 +24,9 @@ static TideStatus draw_buffer_lines(TideEditor *editor, TideScreen *screen)
 {
     size_t editable_height = screen->height > 1 ? screen->height - 1 : screen->height;
     TideCell text_cell = tide_cell_make(' ', TIDE_COLOR_DEFAULT, TIDE_COLOR_DEFAULT, TIDE_STYLE_NONE);
+    TideBufferPosition match = tide_editor_search_match(editor);
+    size_t match_length = tide_editor_search_match_length(editor);
+    int has_match = tide_editor_search_has_match(editor);
 
     for (size_t row = 0; row < editable_height; ++row) {
         size_t line_index = editor->viewport_line + row;
@@ -35,8 +38,13 @@ static TideStatus draw_buffer_lines(TideEditor *editor, TideScreen *screen)
         }
 
         for (size_t col = 0; col < screen->width && editor->viewport_column + col < line_length; ++col) {
+            size_t buffer_column = editor->viewport_column + col;
             char ch = line[editor->viewport_column + col];
             text_cell.ch = ch == '\t' ? ' ' : ch;
+            text_cell.style = TIDE_STYLE_NONE;
+            if (has_match && line_index == match.line && buffer_column >= match.column && buffer_column < match.column + match_length) {
+                text_cell.style = TIDE_STYLE_REVERSE;
+            }
             TideStatus status = tide_screen_set(screen, col, row, text_cell);
             if (status != TIDE_OK) {
                 return status;
