@@ -1,0 +1,9 @@
+function(add_tide_test name source)
+    add_executable(${name} ${source})
+    target_link_libraries(${name} PRIVATE tide_core)
+    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_options(${name} PRIVATE -Wall -Wextra -Werror -g -O0)
+    add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+add_tide_test(test_status test_status.c)
