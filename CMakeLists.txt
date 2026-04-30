@@ -16,6 +16,7 @@ add_library(tide_core
     src/ansi.c
     src/terminal.c
     src/app.c
+    src/buffer.c
 )
 
 target_include_directories(tide_core PUBLIC include)
