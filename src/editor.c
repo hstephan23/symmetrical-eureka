@@ -111,6 +111,11 @@ static TideStatus apply_history_action(TideEditor *editor, TideEditorEditAction 
 void tide_editor_init(TideEditor *editor, TideBuffer *buffer)
 {
     editor->buffer = buffer;
+    tide_editor_reset_view(editor);
+}
+
+void tide_editor_reset_view(TideEditor *editor)
+{
     editor->cursor = (TideBufferPosition){0, 0};
     editor->viewport_line = 0;
     editor->viewport_column = 0;

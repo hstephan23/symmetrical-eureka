@@ -67,6 +67,8 @@ Command prompt:
 - `write`, `save`, or `w` saves.
 - `quit` or `q` quits.
 - `wq` saves and quits.
+- `open <path>` opens a file in the current editor.
+- `reload` reloads the current file from disk.
 - `find <text>` searches in the current file.
 - `next` jumps to the next match.
 - `prev` jumps to the previous match.

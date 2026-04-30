@@ -83,6 +83,48 @@ static void test_save_file_clears_dirty(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_replace_with_file_swaps_content_and_path(void)
+{
+    TideBuffer buffer;
+    const char *old_path = "test-buffer-replace-old.txt";
+    const char *new_path = "test-buffer-replace-new.txt";
+    FILE *file = fopen(new_path, "w");
+    TIDE_ASSERT(file != NULL);
+    fputs("one\ntwo", file);
+    fclose(file);
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    TIDE_ASSERT(tide_buffer_set_path(&buffer, old_path) == TIDE_OK);
+    TIDE_ASSERT(tide_buffer_insert_char(&buffer, 0, 0, 'x') == TIDE_OK);
+
+    TIDE_ASSERT(tide_buffer_replace_with_file(&buffer, new_path) == TIDE_OK);
+
+    TIDE_ASSERT(buffer.line_count == 2);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "one");
+    TIDE_ASSERT_STR_EQ(buffer.lines[1].data, "two");
+    TIDE_ASSERT_STR_EQ(buffer.path, new_path);
+    TIDE_ASSERT(buffer.dirty == 0);
+    tide_buffer_free(&buffer);
+}
+
+static void test_replace_with_file_keeps_original_on_failure(void)
+{
+    TideBuffer buffer;
+    const char *old_path = "test-buffer-replace-keep.txt";
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    TIDE_ASSERT(tide_buffer_set_path(&buffer, old_path) == TIDE_OK);
+    TIDE_ASSERT(tide_buffer_insert_char(&buffer, 0, 0, 'x') == TIDE_OK);
+
+    TIDE_ASSERT(tide_buffer_replace_with_file(&buffer, ".") == TIDE_ERR_IO);
+
+    TIDE_ASSERT(buffer.line_count == 1);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "x");
+    TIDE_ASSERT_STR_EQ(buffer.path, old_path);
+    TIDE_ASSERT(buffer.dirty == 1);
+    tide_buffer_free(&buffer);
+}
+
 int main(void)
 {
     test_buffer_starts_with_one_empty_line();
@@ -90,5 +132,7 @@ int main(void)
     test_delete_before_cursor_joins_lines();
     test_load_file_splits_lines();
     test_save_file_clears_dirty();
+    test_replace_with_file_swaps_content_and_path();
+    test_replace_with_file_keeps_original_on_failure();
     return 0;
 }
