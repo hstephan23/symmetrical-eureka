@@ -45,3 +45,18 @@ ctest --test-dir build-asan --output-on-failure
 ```
 
 In interactive mode, press `q` to exit.
+
+## Edit A File
+
+```bash
+./build/tide path/to/file.c
+```
+
+Interactive keys:
+
+- Printable characters insert text.
+- Arrow keys move the cursor.
+- Enter inserts a newline.
+- Backspace deletes before the cursor.
+- Ctrl-S saves.
+- Ctrl-Q quits.

@@ -27,5 +27,14 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    if (argc == 2) {
+        return tide_app_run_file(argv[1]);
+    }
+
+    if (argc > 2) {
+        fputs("tide: expected at most one file path\n", stderr);
+        return 1;
+    }
+
     return tide_app_run();
 }
