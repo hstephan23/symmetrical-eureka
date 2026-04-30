@@ -12,6 +12,8 @@ add_library(tide_core
     src/rect.c
     src/input.c
     src/screen.c
+    src/string_builder.c
+    src/ansi.c
 )
 
 target_include_directories(tide_core PUBLIC include)
