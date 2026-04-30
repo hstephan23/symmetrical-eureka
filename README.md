@@ -1,11 +1,47 @@
 # Terminal C IDE
 
-Planning workspace for a macOS-first terminal IDE written in C.
+`tide` is a macOS-first terminal IDE written in C. The project is intentionally built from scratch: no `ncurses`, terminal UI library, JSON library, async library, editor library, or LSP client library.
 
-The goal is a command-centric terminal-native C IDE built from scratch: editor core, terminal renderer, command palette, build integration, LSP support through `clangd`, debugger hooks, sessions, themes, and extension-like commands.
+The current implementation target is Foundation: terminal raw mode, input parsing, virtual screen rendering, ANSI output, layout primitives, and a minimal command-centric app shell.
 
-The current design spec is here:
+## Design
 
 - [Terminal C IDE Design](docs/superpowers/specs/2026-04-30-terminal-c-ide-design.md)
+- [Foundation Implementation Plan](docs/superpowers/plans/2026-04-30-terminal-c-ide-foundation.md)
 
-Implementation has not started yet. The old `mysh` shell code has been removed so the repository is focused on the new IDE project.
+## Requirements
+
+- macOS
+- CMake 3.20+
+- Apple Clang or compatible C11 compiler
+
+## Build
+
+```bash
+cmake -S . -B build
+cmake --build build
+```
+
+## Test
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+## Sanitizer Build
+
+```bash
+cmake -S . -B build-asan -DTIDE_ENABLE_SANITIZERS=ON
+cmake --build build-asan
+ctest --test-dir build-asan --output-on-failure
+```
+
+## Run
+
+```bash
+./build/tide --version
+./build/tide --render-demo
+./build/tide
+```
+
+In interactive mode, press `q` to exit.
