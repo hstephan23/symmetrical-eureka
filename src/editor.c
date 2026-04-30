@@ -15,6 +15,9 @@ void tide_editor_init(TideEditor *editor, TideBuffer *buffer)
     editor->viewport_line = 0;
     editor->viewport_column = 0;
     editor->status[0] = '\0';
+    editor->prompt_mode = TIDE_EDITOR_PROMPT_CLOSED;
+    editor->command[0] = '\0';
+    editor->command_length = 0;
 }
 
 TideStatus tide_editor_insert_char(TideEditor *editor, char ch)
@@ -101,4 +104,53 @@ void tide_editor_ensure_cursor_visible(TideEditor *editor, size_t width, size_t 
     } else if (width > 0 && editor->cursor.column >= editor->viewport_column + width) {
         editor->viewport_column = editor->cursor.column - width + 1;
     }
+}
+
+void tide_editor_open_command_prompt(TideEditor *editor)
+{
+    editor->prompt_mode = TIDE_EDITOR_PROMPT_COMMAND;
+    editor->command[0] = '\0';
+    editor->command_length = 0;
+    tide_editor_set_status(editor, "");
+}
+
+void tide_editor_cancel_command_prompt(TideEditor *editor)
+{
+    editor->prompt_mode = TIDE_EDITOR_PROMPT_CLOSED;
+    editor->command[0] = '\0';
+    editor->command_length = 0;
+}
+
+int tide_editor_command_active(const TideEditor *editor)
+{
+    return editor->prompt_mode == TIDE_EDITOR_PROMPT_COMMAND;
+}
+
+TideStatus tide_editor_command_insert_char(TideEditor *editor, char ch)
+{
+    if (!tide_editor_command_active(editor)) {
+        return TIDE_ERR_INVALID;
+    }
+    if (editor->command_length + 1 >= sizeof(editor->command)) {
+        return TIDE_OK;
+    }
+
+    editor->command[editor->command_length++] = ch;
+    editor->command[editor->command_length] = '\0';
+    return TIDE_OK;
+}
+
+void tide_editor_command_backspace(TideEditor *editor)
+{
+    if (!tide_editor_command_active(editor) || editor->command_length == 0) {
+        return;
+    }
+
+    editor->command_length--;
+    editor->command[editor->command_length] = '\0';
+}
+
+const char *tide_editor_command_text(const TideEditor *editor)
+{
+    return editor->command;
 }

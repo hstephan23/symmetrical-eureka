@@ -54,10 +54,46 @@ static void test_arrow_movement_clamps_to_line_lengths(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_command_prompt_collects_text_without_editing_buffer(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    tide_editor_open_command_prompt(&editor);
+    TIDE_ASSERT(tide_editor_command_insert_char(&editor, 'w') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_command_insert_char(&editor, 'q') == TIDE_OK);
+
+    TIDE_ASSERT(tide_editor_command_active(&editor));
+    TIDE_ASSERT_STR_EQ(tide_editor_command_text(&editor), "wq");
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "");
+    tide_buffer_free(&buffer);
+}
+
+static void test_command_prompt_backspace_and_cancel(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    tide_editor_open_command_prompt(&editor);
+    TIDE_ASSERT(tide_editor_command_insert_char(&editor, 'q') == TIDE_OK);
+    tide_editor_command_backspace(&editor);
+    TIDE_ASSERT_STR_EQ(tide_editor_command_text(&editor), "");
+    tide_editor_cancel_command_prompt(&editor);
+
+    TIDE_ASSERT(!tide_editor_command_active(&editor));
+    tide_buffer_free(&buffer);
+}
+
 int main(void)
 {
     test_insert_text_advances_cursor();
     test_newline_and_backspace_update_cursor();
     test_arrow_movement_clamps_to_line_lengths();
+    test_command_prompt_collects_text_without_editing_buffer();
+    test_command_prompt_backspace_and_cancel();
     return 0;
 }

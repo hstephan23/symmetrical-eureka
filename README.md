@@ -59,4 +59,12 @@ Interactive keys:
 - Enter inserts a newline.
 - Backspace deletes before the cursor.
 - Ctrl-S saves.
+- Ctrl-P opens the command prompt.
 - Ctrl-Q quits.
+
+Command prompt:
+
+- `write`, `save`, or `w` saves.
+- `quit` or `q` quits.
+- `wq` saves and quits.
+- Escape or Ctrl-P closes the prompt.

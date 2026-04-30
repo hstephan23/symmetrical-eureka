@@ -21,6 +21,7 @@ typedef enum TideKey {
     TIDE_KEY_CTRL_C,
     TIDE_KEY_CTRL_Q,
     TIDE_KEY_CTRL_S,
+    TIDE_KEY_CTRL_P,
     TIDE_KEY_ARROW_UP,
     TIDE_KEY_ARROW_DOWN,
     TIDE_KEY_ARROW_RIGHT,

@@ -31,6 +31,18 @@ static void test_ctrl_s_event(void)
     TIDE_ASSERT(event.key == TIDE_KEY_CTRL_S);
 }
 
+static void test_ctrl_p_event(void)
+{
+    TideInputParser parser;
+    TideInputEvent event;
+
+    tide_input_parser_init(&parser);
+    feed_one(&parser, 0x10, &event);
+
+    TIDE_ASSERT(event.type == TIDE_INPUT_KEY);
+    TIDE_ASSERT(event.key == TIDE_KEY_CTRL_P);
+}
+
 static void test_arrow_left_event_can_arrive_across_reads(void)
 {
     TideInputParser parser;
@@ -60,6 +72,7 @@ int main(void)
 {
     test_printable_text_event();
     test_ctrl_s_event();
+    test_ctrl_p_event();
     test_arrow_left_event_can_arrive_across_reads();
     test_bare_escape_flushes_as_escape_key();
     return 0;

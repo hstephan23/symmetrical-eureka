@@ -64,6 +64,8 @@ TideInputResult tide_input_feed(TideInputParser *parser, unsigned char byte, Tid
         return emit_key(event, TIDE_KEY_CTRL_Q);
     case 0x13:
         return emit_key(event, TIDE_KEY_CTRL_S);
+    case 0x10:
+        return emit_key(event, TIDE_KEY_CTRL_P);
     default:
         if (byte >= 0x20 && byte != 0x7f) {
             return emit_text(event, byte);
