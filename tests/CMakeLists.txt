@@ -7,3 +7,4 @@ function(add_tide_test name source)
 endfunction()
 
 add_tide_test(test_status test_status.c)
+add_tide_test(test_rect test_rect.c)
