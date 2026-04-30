@@ -56,6 +56,7 @@ typedef struct TideEditor {
 } TideEditor;
 
 void tide_editor_init(TideEditor *editor, TideBuffer *buffer);
+void tide_editor_reset_view(TideEditor *editor);
 TideStatus tide_editor_insert_char(TideEditor *editor, char ch);
 TideStatus tide_editor_insert_newline(TideEditor *editor);
 TideStatus tide_editor_backspace(TideEditor *editor);

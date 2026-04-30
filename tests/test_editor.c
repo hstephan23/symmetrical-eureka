@@ -244,6 +244,36 @@ static void test_edit_clears_search_match(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_reset_view_clears_editor_state(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    insert_text(&editor, "abc");
+    editor.cursor = (TideBufferPosition){0, 0};
+    TIDE_ASSERT(tide_editor_find(&editor, "b") == TIDE_OK);
+    TIDE_ASSERT(tide_editor_search_has_match(&editor));
+    editor.viewport_line = 3;
+    editor.viewport_column = 2;
+    tide_editor_set_status(&editor, "status");
+
+    tide_editor_reset_view(&editor);
+
+    TIDE_ASSERT(editor.buffer == &buffer);
+    TIDE_ASSERT(editor.cursor.line == 0);
+    TIDE_ASSERT(editor.cursor.column == 0);
+    TIDE_ASSERT(editor.viewport_line == 0);
+    TIDE_ASSERT(editor.viewport_column == 0);
+    TIDE_ASSERT_STR_EQ(editor.status, "");
+    TIDE_ASSERT(!tide_editor_search_has_match(&editor));
+    TIDE_ASSERT(tide_editor_undo(&editor) == TIDE_OK);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "abc");
+    TIDE_ASSERT_STR_EQ(editor.status, "nothing to undo");
+    tide_buffer_free(&buffer);
+}
+
 int main(void)
 {
     test_insert_text_advances_cursor();
@@ -259,5 +289,6 @@ int main(void)
     test_undo_newline_and_join();
     test_new_edit_after_undo_clears_redo();
     test_edit_clears_search_match();
+    test_reset_view_clears_editor_state();
     return 0;
 }
