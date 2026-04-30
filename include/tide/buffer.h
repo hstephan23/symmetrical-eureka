@@ -33,6 +33,7 @@ const char *tide_buffer_line_text(const TideBuffer *buffer, size_t line);
 size_t tide_buffer_line_length(const TideBuffer *buffer, size_t line);
 TideStatus tide_buffer_set_path(TideBuffer *buffer, const char *path);
 TideStatus tide_buffer_load_file(TideBuffer *buffer, const char *path);
+TideStatus tide_buffer_replace_with_file(TideBuffer *buffer, const char *path);
 TideStatus tide_buffer_save(TideBuffer *buffer);
 
 #endif

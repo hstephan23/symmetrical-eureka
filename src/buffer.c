@@ -416,6 +416,20 @@ TideStatus tide_buffer_load_file(TideBuffer *buffer, const char *path)
     return TIDE_OK;
 }
 
+TideStatus tide_buffer_replace_with_file(TideBuffer *buffer, const char *path)
+{
+    TideBuffer replacement;
+    TideStatus status = tide_buffer_load_file(&replacement, path);
+    if (status != TIDE_OK) {
+        return status;
+    }
+
+    TideBuffer old = *buffer;
+    *buffer = replacement;
+    tide_buffer_free(&old);
+    return TIDE_OK;
+}
+
 static TideStatus write_buffer(FILE *file, const TideBuffer *buffer)
 {
     for (size_t i = 0; i < buffer->line_count; ++i) {
