@@ -1,5 +1,7 @@
 #include "tide/editor_render.h"
 
+#include "tide/syntax.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -20,6 +22,28 @@ static TideStatus draw_text(TideScreen *screen, size_t x, size_t y, const char *
     return TIDE_OK;
 }
 
+static TideColor syntax_color(TideSyntaxKind kind)
+{
+    switch (kind) {
+    case TIDE_SYNTAX_KEYWORD:
+        return TIDE_COLOR_CYAN;
+    case TIDE_SYNTAX_TYPE:
+        return TIDE_COLOR_GREEN;
+    case TIDE_SYNTAX_NUMBER:
+        return TIDE_COLOR_YELLOW;
+    case TIDE_SYNTAX_STRING:
+    case TIDE_SYNTAX_CHAR:
+        return TIDE_COLOR_MAGENTA;
+    case TIDE_SYNTAX_COMMENT:
+        return TIDE_COLOR_BLUE;
+    case TIDE_SYNTAX_PREPROCESSOR:
+        return TIDE_COLOR_RED;
+    case TIDE_SYNTAX_TEXT:
+        return TIDE_COLOR_DEFAULT;
+    }
+    return TIDE_COLOR_DEFAULT;
+}
+
 static TideStatus draw_buffer_lines(TideEditor *editor, TideScreen *screen)
 {
     size_t editable_height = screen->height > 1 ? screen->height - 1 : screen->height;
@@ -37,10 +61,15 @@ static TideStatus draw_buffer_lines(TideEditor *editor, TideScreen *screen)
             continue;
         }
 
+        TideSyntaxLine syntax;
+        tide_syntax_tokenize_c_line(line, line_length, &syntax);
+
         for (size_t col = 0; col < screen->width && editor->viewport_column + col < line_length; ++col) {
             size_t buffer_column = editor->viewport_column + col;
             char ch = line[editor->viewport_column + col];
             text_cell.ch = ch == '\t' ? ' ' : ch;
+            text_cell.fg = syntax_color(tide_syntax_kind_at(&syntax, buffer_column));
+            text_cell.bg = TIDE_COLOR_DEFAULT;
             text_cell.style = TIDE_STYLE_NONE;
             if (has_match && line_index == match.line && buffer_column >= match.column && buffer_column < match.column + match_length) {
                 text_cell.style = TIDE_STYLE_REVERSE;
