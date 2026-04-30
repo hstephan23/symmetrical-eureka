@@ -10,6 +10,7 @@ option(TIDE_ENABLE_SANITIZERS "Build with AddressSanitizer and UndefinedBehavior
 add_library(tide_core
     src/status.c
     src/rect.c
+    src/input.c
 )
 
 target_include_directories(tide_core PUBLIC include)
