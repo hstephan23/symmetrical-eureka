@@ -109,6 +109,41 @@ static void test_next_without_search_sets_status(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_undo_command_reverts_edit(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'x') == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_editor_command(&editor, "undo", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "");
+    tide_buffer_free(&buffer);
+}
+
+static void test_redo_command_reapplies_edit(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'x') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_undo(&editor) == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_editor_command(&editor, "redo", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "x");
+    tide_buffer_free(&buffer);
+}
+
 int main(void)
 {
     test_demo_render_contains_title_and_status();
@@ -117,5 +152,7 @@ int main(void)
     test_unknown_command_stays_open_and_sets_status();
     test_find_command_moves_cursor();
     test_next_without_search_sets_status();
+    test_undo_command_reverts_edit();
+    test_redo_command_reapplies_edit();
     return 0;
 }
