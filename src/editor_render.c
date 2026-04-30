@@ -73,6 +73,12 @@ static TideStatus draw_status(TideEditor *editor, TideScreen *screen)
         }
     }
 
+    if (tide_editor_command_active(editor)) {
+        char prompt[sizeof(editor->command) + 2];
+        snprintf(prompt, sizeof(prompt), ":%s", tide_editor_command_text(editor));
+        return draw_text(screen, 0, status_y, prompt, status_cell);
+    }
+
     return draw_text(screen, 0, status_y, status, status_cell);
 }
 
