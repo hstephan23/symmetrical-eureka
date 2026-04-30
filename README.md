@@ -70,4 +70,6 @@ Command prompt:
 - `find <text>` searches in the current file.
 - `next` jumps to the next match.
 - `prev` jumps to the previous match.
+- `undo` reverts the last edit.
+- `redo` reapplies the last undone edit.
 - Escape or Ctrl-P closes the prompt.
