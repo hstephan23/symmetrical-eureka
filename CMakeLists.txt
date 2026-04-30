@@ -14,6 +14,7 @@ add_library(tide_core
     src/screen.c
     src/string_builder.c
     src/ansi.c
+    src/terminal.c
 )
 
 target_include_directories(tide_core PUBLIC include)
