@@ -190,9 +190,72 @@ static int event_requests_quit(const TideInputEvent *event)
     return 0;
 }
 
+static int command_matches(const char *command, const char *a, const char *b)
+{
+    return strcmp(command, a) == 0 || strcmp(command, b) == 0;
+}
+
+TideStatus tide_app_execute_editor_command(TideEditor *editor, const char *command, int *quit)
+{
+    *quit = 0;
+
+    if (command_matches(command, "save", "write") || strcmp(command, "w") == 0) {
+        TideStatus status = tide_buffer_save(editor->buffer);
+        tide_editor_set_status(editor, status == TIDE_OK ? "saved" : tide_status_string(status));
+        return TIDE_OK;
+    }
+
+    if (command_matches(command, "quit", "q")) {
+        *quit = 1;
+        return TIDE_OK;
+    }
+
+    if (strcmp(command, "wq") == 0) {
+        TideStatus status = tide_buffer_save(editor->buffer);
+        tide_editor_set_status(editor, status == TIDE_OK ? "saved" : tide_status_string(status));
+        if (status == TIDE_OK) {
+            *quit = 1;
+        }
+        return TIDE_OK;
+    }
+
+    char message[sizeof(editor->status)];
+    snprintf(message, sizeof(message), "unknown command: %s", command);
+    tide_editor_set_status(editor, message);
+    return TIDE_OK;
+}
+
 static TideStatus handle_editor_event(TideEditor *editor, const TideInputEvent *event, int *quit)
 {
     *quit = 0;
+
+    if (tide_editor_command_active(editor)) {
+        if (event->type == TIDE_INPUT_TEXT) {
+            return tide_editor_command_insert_char(editor, (char)event->text);
+        }
+
+        if (event->type != TIDE_INPUT_KEY) {
+            return TIDE_OK;
+        }
+
+        switch (event->key) {
+        case TIDE_KEY_ENTER: {
+            char command[TIDE_EDITOR_COMMAND_CAPACITY];
+            snprintf(command, sizeof(command), "%s", tide_editor_command_text(editor));
+            tide_editor_cancel_command_prompt(editor);
+            return tide_app_execute_editor_command(editor, command, quit);
+        }
+        case TIDE_KEY_BACKSPACE:
+            tide_editor_command_backspace(editor);
+            return TIDE_OK;
+        case TIDE_KEY_ESCAPE:
+        case TIDE_KEY_CTRL_P:
+            tide_editor_cancel_command_prompt(editor);
+            return TIDE_OK;
+        default:
+            return TIDE_OK;
+        }
+    }
 
     if (event->type == TIDE_INPUT_TEXT) {
         TideStatus status = tide_editor_insert_char(editor, (char)event->text);
@@ -230,6 +293,9 @@ static TideStatus handle_editor_event(TideEditor *editor, const TideInputEvent *
         tide_editor_set_status(editor, status == TIDE_OK ? "saved" : tide_status_string(status));
         return TIDE_OK;
     }
+    case TIDE_KEY_CTRL_P:
+        tide_editor_open_command_prompt(editor);
+        return TIDE_OK;
     case TIDE_KEY_CTRL_Q:
     case TIDE_KEY_CTRL_C:
         *quit = 1;
@@ -387,6 +453,24 @@ int tide_app_run_file(const char *path)
             break;
         }
         if (nread == 0) {
+            TideInputEvent event;
+            int should_quit = 0;
+            TideInputResult result = tide_input_flush(&parser, &event);
+            if (result == TIDE_INPUT_EVENT) {
+                status = handle_editor_event(&editor, &event, &should_quit);
+                if (status != TIDE_OK) {
+                    tide_editor_set_status(&editor, tide_status_string(status));
+                }
+                if (should_quit) {
+                    shutdown_requested = 1;
+                }
+
+                status = render_editor_to_terminal(&editor);
+                if (status != TIDE_OK) {
+                    exit_code = 1;
+                    shutdown_requested = 1;
+                }
+            }
             continue;
         }
 
