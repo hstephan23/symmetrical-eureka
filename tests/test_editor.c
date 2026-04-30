@@ -158,6 +158,92 @@ static void test_find_no_match_sets_status_and_keeps_cursor(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_undo_and_redo_insert_char(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'x') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_undo(&editor) == TIDE_OK);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "");
+    TIDE_ASSERT(editor.cursor.column == 0);
+    TIDE_ASSERT(tide_editor_redo(&editor) == TIDE_OK);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "x");
+    TIDE_ASSERT(editor.cursor.column == 1);
+    tide_buffer_free(&buffer);
+}
+
+static void test_undo_backspace_restores_deleted_char(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'a') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'b') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_backspace(&editor) == TIDE_OK);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "a");
+    TIDE_ASSERT(tide_editor_undo(&editor) == TIDE_OK);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "ab");
+    TIDE_ASSERT(editor.cursor.column == 2);
+    tide_buffer_free(&buffer);
+}
+
+static void test_undo_newline_and_join(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'a') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_insert_newline(&editor) == TIDE_OK);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'b') == TIDE_OK);
+    TIDE_ASSERT(buffer.line_count == 2);
+    TIDE_ASSERT(tide_editor_undo(&editor) == TIDE_OK);
+    TIDE_ASSERT(tide_editor_undo(&editor) == TIDE_OK);
+    TIDE_ASSERT(buffer.line_count == 1);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "a");
+    TIDE_ASSERT(tide_editor_redo(&editor) == TIDE_OK);
+    TIDE_ASSERT(buffer.line_count == 2);
+    tide_buffer_free(&buffer);
+}
+
+static void test_new_edit_after_undo_clears_redo(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'a') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_undo(&editor) == TIDE_OK);
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'b') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_redo(&editor) == TIDE_OK);
+    TIDE_ASSERT_STR_EQ(buffer.lines[0].data, "b");
+    TIDE_ASSERT_STR_EQ(editor.status, "nothing to redo");
+    tide_buffer_free(&buffer);
+}
+
+static void test_edit_clears_search_match(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    insert_text(&editor, "abc");
+    editor.cursor = (TideBufferPosition){0, 0};
+    TIDE_ASSERT(tide_editor_find(&editor, "b") == TIDE_OK);
+    TIDE_ASSERT(tide_editor_search_has_match(&editor));
+    TIDE_ASSERT(tide_editor_insert_char(&editor, 'x') == TIDE_OK);
+    TIDE_ASSERT(!tide_editor_search_has_match(&editor));
+    tide_buffer_free(&buffer);
+}
+
 int main(void)
 {
     test_insert_text_advances_cursor();
@@ -168,5 +254,10 @@ int main(void)
     test_find_moves_cursor_to_first_match_at_or_after_cursor();
     test_find_next_and_previous_wrap();
     test_find_no_match_sets_status_and_keeps_cursor();
+    test_undo_and_redo_insert_char();
+    test_undo_backspace_restores_deleted_char();
+    test_undo_newline_and_join();
+    test_new_edit_after_undo_clears_redo();
+    test_edit_clears_search_match();
     return 0;
 }

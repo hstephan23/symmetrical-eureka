@@ -8,6 +8,7 @@
 
 #define TIDE_EDITOR_COMMAND_CAPACITY 128
 #define TIDE_EDITOR_SEARCH_CAPACITY 128
+#define TIDE_EDITOR_HISTORY_CAPACITY 256
 
 typedef enum TideEditorPromptMode {
     TIDE_EDITOR_PROMPT_CLOSED = 0,
@@ -20,6 +21,19 @@ typedef enum TideEditorMove {
     TIDE_EDITOR_MOVE_LEFT,
     TIDE_EDITOR_MOVE_RIGHT
 } TideEditorMove;
+
+typedef enum TideEditorEditActionKind {
+    TIDE_EDITOR_ACTION_INSERT_CHAR = 1,
+    TIDE_EDITOR_ACTION_DELETE_CHAR,
+    TIDE_EDITOR_ACTION_INSERT_NEWLINE,
+    TIDE_EDITOR_ACTION_DELETE_NEWLINE
+} TideEditorEditActionKind;
+
+typedef struct TideEditorEditAction {
+    TideEditorEditActionKind kind;
+    TideBufferPosition position;
+    char ch;
+} TideEditorEditAction;
 
 typedef struct TideEditor {
     TideBuffer *buffer;
@@ -35,12 +49,18 @@ typedef struct TideEditor {
     TideBufferPosition search_match;
     size_t search_match_length;
     int search_has_match;
+    TideEditorEditAction undo_stack[TIDE_EDITOR_HISTORY_CAPACITY];
+    size_t undo_count;
+    TideEditorEditAction redo_stack[TIDE_EDITOR_HISTORY_CAPACITY];
+    size_t redo_count;
 } TideEditor;
 
 void tide_editor_init(TideEditor *editor, TideBuffer *buffer);
 TideStatus tide_editor_insert_char(TideEditor *editor, char ch);
 TideStatus tide_editor_insert_newline(TideEditor *editor);
 TideStatus tide_editor_backspace(TideEditor *editor);
+TideStatus tide_editor_undo(TideEditor *editor);
+TideStatus tide_editor_redo(TideEditor *editor);
 void tide_editor_move(TideEditor *editor, TideEditorMove move);
 void tide_editor_set_status(TideEditor *editor, const char *message);
 void tide_editor_ensure_cursor_visible(TideEditor *editor, size_t width, size_t height);

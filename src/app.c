@@ -240,6 +240,14 @@ TideStatus tide_app_execute_editor_command(TideEditor *editor, const char *comma
         return tide_editor_find_previous(editor);
     }
 
+    if (strcmp(command, "undo") == 0) {
+        return tide_editor_undo(editor);
+    }
+
+    if (strcmp(command, "redo") == 0) {
+        return tide_editor_redo(editor);
+    }
+
     char message[sizeof(editor->status)];
     snprintf(message, sizeof(message), "unknown command: %s", command);
     tide_editor_set_status(editor, message);

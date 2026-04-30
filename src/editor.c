@@ -9,6 +9,105 @@ static size_t clamp_column(const TideBuffer *buffer, size_t line, size_t column)
     return column > length ? length : column;
 }
 
+static void clear_search(TideEditor *editor)
+{
+    editor->search_query[0] = '\0';
+    editor->search_query_length = 0;
+    editor->search_match = (TideBufferPosition){0, 0};
+    editor->search_match_length = 0;
+    editor->search_has_match = 0;
+}
+
+static void push_action(TideEditorEditAction *stack, size_t *count, TideEditorEditAction action)
+{
+    if (*count == TIDE_EDITOR_HISTORY_CAPACITY) {
+        memmove(stack, stack + 1, (TIDE_EDITOR_HISTORY_CAPACITY - 1) * sizeof(*stack));
+        *count = TIDE_EDITOR_HISTORY_CAPACITY - 1;
+    }
+
+    stack[*count] = action;
+    (*count)++;
+}
+
+static int pop_action(TideEditorEditAction *stack, size_t *count, TideEditorEditAction *action)
+{
+    if (*count == 0) {
+        return 0;
+    }
+
+    (*count)--;
+    *action = stack[*count];
+    return 1;
+}
+
+static void record_edit(TideEditor *editor, TideEditorEditAction undo_action)
+{
+    push_action(editor->undo_stack, &editor->undo_count, undo_action);
+    editor->redo_count = 0;
+    clear_search(editor);
+}
+
+static TideStatus apply_history_action(TideEditor *editor, TideEditorEditAction action, TideEditorEditAction *inverse)
+{
+    TideBufferPosition next_cursor;
+    TideStatus status;
+
+    switch (action.kind) {
+    case TIDE_EDITOR_ACTION_INSERT_CHAR:
+        status = tide_buffer_insert_char(editor->buffer, action.position.line, action.position.column, action.ch);
+        if (status == TIDE_OK) {
+            editor->cursor = (TideBufferPosition){action.position.line, action.position.column + 1};
+            *inverse = (TideEditorEditAction){TIDE_EDITOR_ACTION_DELETE_CHAR, action.position, action.ch};
+        }
+        return status;
+
+    case TIDE_EDITOR_ACTION_DELETE_CHAR:
+        if (action.position.line >= editor->buffer->line_count ||
+            action.position.column >= tide_buffer_line_length(editor->buffer, action.position.line)) {
+            return TIDE_ERR_INVALID;
+        }
+        action.ch = tide_buffer_line_text(editor->buffer, action.position.line)[action.position.column];
+        status = tide_buffer_delete_before(
+            editor->buffer,
+            (TideBufferPosition){action.position.line, action.position.column + 1},
+            &next_cursor);
+        if (status == TIDE_OK) {
+            editor->cursor = next_cursor;
+            *inverse = (TideEditorEditAction){TIDE_EDITOR_ACTION_INSERT_CHAR, action.position, action.ch};
+        }
+        return status;
+
+    case TIDE_EDITOR_ACTION_INSERT_NEWLINE:
+        status = tide_buffer_insert_newline(editor->buffer, action.position.line, action.position.column);
+        if (status == TIDE_OK) {
+            editor->cursor = (TideBufferPosition){action.position.line + 1, 0};
+            *inverse = (TideEditorEditAction){
+                TIDE_EDITOR_ACTION_DELETE_NEWLINE,
+                (TideBufferPosition){action.position.line + 1, 0},
+                0};
+        }
+        return status;
+
+    case TIDE_EDITOR_ACTION_DELETE_NEWLINE:
+        if (action.position.line == 0 || action.position.line >= editor->buffer->line_count || action.position.column != 0) {
+            return TIDE_ERR_INVALID;
+        }
+
+        size_t join_column = tide_buffer_line_length(editor->buffer, action.position.line - 1);
+        status = tide_buffer_delete_before(editor->buffer, action.position, &next_cursor);
+        if (status == TIDE_OK) {
+            editor->cursor = next_cursor;
+            *inverse = (TideEditorEditAction){
+                TIDE_EDITOR_ACTION_INSERT_NEWLINE,
+                (TideBufferPosition){action.position.line - 1, join_column},
+                0};
+        }
+        return status;
+    }
+
+    return TIDE_ERR_INVALID;
+}
+
 void tide_editor_init(TideEditor *editor, TideBuffer *buffer)
 {
     editor->buffer = buffer;
@@ -24,23 +123,34 @@ void tide_editor_init(TideEditor *editor, TideBuffer *buffer)
     editor->search_match = (TideBufferPosition){0, 0};
     editor->search_match_length = 0;
     editor->search_has_match = 0;
+    editor->undo_count = 0;
+    editor->redo_count = 0;
 }
 
 TideStatus tide_editor_insert_char(TideEditor *editor, char ch)
 {
+    TideBufferPosition position = editor->cursor;
     TideStatus status = tide_buffer_insert_char(editor->buffer, editor->cursor.line, editor->cursor.column, ch);
     if (status == TIDE_OK) {
         editor->cursor.column++;
+        record_edit(editor, (TideEditorEditAction){TIDE_EDITOR_ACTION_DELETE_CHAR, position, ch});
     }
     return status;
 }
 
 TideStatus tide_editor_insert_newline(TideEditor *editor)
 {
+    TideBufferPosition position = editor->cursor;
     TideStatus status = tide_buffer_insert_newline(editor->buffer, editor->cursor.line, editor->cursor.column);
     if (status == TIDE_OK) {
         editor->cursor.line++;
         editor->cursor.column = 0;
+        record_edit(
+            editor,
+            (TideEditorEditAction){
+                TIDE_EDITOR_ACTION_DELETE_NEWLINE,
+                (TideBufferPosition){position.line + 1, 0},
+                0});
     }
     return status;
 }
@@ -48,11 +158,73 @@ TideStatus tide_editor_insert_newline(TideEditor *editor)
 TideStatus tide_editor_backspace(TideEditor *editor)
 {
     TideBufferPosition next_cursor;
+    TideEditorEditAction undo_action;
+    if (editor->cursor.line >= editor->buffer->line_count ||
+        editor->cursor.column > tide_buffer_line_length(editor->buffer, editor->cursor.line)) {
+        return TIDE_ERR_INVALID;
+    }
+
+    if (editor->cursor.line == 0 && editor->cursor.column == 0) {
+        return TIDE_OK;
+    }
+
+    if (editor->cursor.column > 0) {
+        TideBufferPosition position = {editor->cursor.line, editor->cursor.column - 1};
+        char deleted = tide_buffer_line_text(editor->buffer, position.line)[position.column];
+        undo_action = (TideEditorEditAction){TIDE_EDITOR_ACTION_INSERT_CHAR, position, deleted};
+    } else {
+        undo_action = (TideEditorEditAction){
+            TIDE_EDITOR_ACTION_INSERT_NEWLINE,
+            (TideBufferPosition){editor->cursor.line - 1, tide_buffer_line_length(editor->buffer, editor->cursor.line - 1)},
+            0};
+    }
+
     TideStatus status = tide_buffer_delete_before(editor->buffer, editor->cursor, &next_cursor);
     if (status == TIDE_OK) {
         editor->cursor = next_cursor;
+        record_edit(editor, undo_action);
     }
     return status;
+}
+
+TideStatus tide_editor_undo(TideEditor *editor)
+{
+    TideEditorEditAction action;
+    TideEditorEditAction inverse;
+    if (!pop_action(editor->undo_stack, &editor->undo_count, &action)) {
+        tide_editor_set_status(editor, "nothing to undo");
+        return TIDE_OK;
+    }
+
+    TideStatus status = apply_history_action(editor, action, &inverse);
+    if (status != TIDE_OK) {
+        push_action(editor->undo_stack, &editor->undo_count, action);
+        return status;
+    }
+
+    push_action(editor->redo_stack, &editor->redo_count, inverse);
+    clear_search(editor);
+    return TIDE_OK;
+}
+
+TideStatus tide_editor_redo(TideEditor *editor)
+{
+    TideEditorEditAction action;
+    TideEditorEditAction inverse;
+    if (!pop_action(editor->redo_stack, &editor->redo_count, &action)) {
+        tide_editor_set_status(editor, "nothing to redo");
+        return TIDE_OK;
+    }
+
+    TideStatus status = apply_history_action(editor, action, &inverse);
+    if (status != TIDE_OK) {
+        push_action(editor->redo_stack, &editor->redo_count, action);
+        return status;
+    }
+
+    push_action(editor->undo_stack, &editor->undo_count, inverse);
+    clear_search(editor);
+    return TIDE_OK;
 }
 
 void tide_editor_move(TideEditor *editor, TideEditorMove move)
@@ -159,15 +331,6 @@ void tide_editor_command_backspace(TideEditor *editor)
 const char *tide_editor_command_text(const TideEditor *editor)
 {
     return editor->command;
-}
-
-static void clear_search(TideEditor *editor)
-{
-    editor->search_query[0] = '\0';
-    editor->search_query_length = 0;
-    editor->search_match = (TideBufferPosition){0, 0};
-    editor->search_match_length = 0;
-    editor->search_has_match = 0;
 }
 
 static int line_find_between(const char *line, size_t line_length, const char *query, size_t query_length, size_t start_column, size_t end_column, size_t *match_column)
