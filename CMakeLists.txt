@@ -13,6 +13,7 @@ add_library(tide_core
     src/input.c
     src/screen.c
     src/string_builder.c
+    src/syntax.c
     src/ansi.c
     src/terminal.c
     src/app.c
