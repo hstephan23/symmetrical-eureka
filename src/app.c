@@ -203,6 +203,59 @@ static const char *skip_command_spaces(const char *text)
     return text;
 }
 
+static TideStatus replace_editor_file(TideEditor *editor, const char *path, const char *success_status)
+{
+    if (editor->buffer->dirty) {
+        tide_editor_set_status(editor, "unsaved changes; write first");
+        return TIDE_OK;
+    }
+
+    TideStatus status = tide_buffer_replace_with_file(editor->buffer, path);
+    if (status != TIDE_OK) {
+        tide_editor_set_status(editor, tide_status_string(status));
+        return TIDE_OK;
+    }
+
+    tide_editor_reset_view(editor);
+    tide_editor_set_status(editor, success_status);
+    return TIDE_OK;
+}
+
+static TideStatus open_editor_file(TideEditor *editor, const char *path)
+{
+    if (path[0] == '\0') {
+        tide_editor_set_status(editor, "path required");
+        return TIDE_OK;
+    }
+
+    if (editor->buffer->dirty) {
+        tide_editor_set_status(editor, "unsaved changes; write first");
+        return TIDE_OK;
+    }
+
+    TideStatus status = tide_buffer_replace_with_file(editor->buffer, path);
+    if (status != TIDE_OK) {
+        tide_editor_set_status(editor, tide_status_string(status));
+        return TIDE_OK;
+    }
+
+    tide_editor_reset_view(editor);
+    char message[sizeof(editor->status)];
+    snprintf(message, sizeof(message), "opened: %s", path);
+    tide_editor_set_status(editor, message);
+    return TIDE_OK;
+}
+
+static TideStatus reload_editor_file(TideEditor *editor)
+{
+    if (editor->buffer->path == NULL) {
+        tide_editor_set_status(editor, "no file to reload");
+        return TIDE_OK;
+    }
+
+    return replace_editor_file(editor, editor->buffer->path, "reloaded");
+}
+
 TideStatus tide_app_execute_editor_command(TideEditor *editor, const char *command, int *quit)
 {
     *quit = 0;
@@ -246,6 +299,15 @@ TideStatus tide_app_execute_editor_command(TideEditor *editor, const char *comma
 
     if (strcmp(command, "redo") == 0) {
         return tide_editor_redo(editor);
+    }
+
+    if (strncmp(command, "open", 4) == 0 && (command[4] == '\0' || command[4] == ' ' || command[4] == '\t')) {
+        const char *path = skip_command_spaces(command + 4);
+        return open_editor_file(editor, path);
+    }
+
+    if (strcmp(command, "reload") == 0) {
+        return reload_editor_file(editor);
     }
 
     char message[sizeof(editor->status)];
