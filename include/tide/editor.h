@@ -7,6 +7,7 @@
 #include "tide/status.h"
 
 #define TIDE_EDITOR_COMMAND_CAPACITY 128
+#define TIDE_EDITOR_SEARCH_CAPACITY 128
 
 typedef enum TideEditorPromptMode {
     TIDE_EDITOR_PROMPT_CLOSED = 0,
@@ -29,6 +30,11 @@ typedef struct TideEditor {
     TideEditorPromptMode prompt_mode;
     char command[TIDE_EDITOR_COMMAND_CAPACITY];
     size_t command_length;
+    char search_query[TIDE_EDITOR_SEARCH_CAPACITY];
+    size_t search_query_length;
+    TideBufferPosition search_match;
+    size_t search_match_length;
+    int search_has_match;
 } TideEditor;
 
 void tide_editor_init(TideEditor *editor, TideBuffer *buffer);
@@ -44,5 +50,12 @@ int tide_editor_command_active(const TideEditor *editor);
 TideStatus tide_editor_command_insert_char(TideEditor *editor, char ch);
 void tide_editor_command_backspace(TideEditor *editor);
 const char *tide_editor_command_text(const TideEditor *editor);
+TideStatus tide_editor_find(TideEditor *editor, const char *query);
+TideStatus tide_editor_find_next(TideEditor *editor);
+TideStatus tide_editor_find_previous(TideEditor *editor);
+int tide_editor_search_has_match(const TideEditor *editor);
+TideBufferPosition tide_editor_search_match(const TideEditor *editor);
+size_t tide_editor_search_match_length(const TideEditor *editor);
+const char *tide_editor_search_query(const TideEditor *editor);
 
 #endif
