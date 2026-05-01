@@ -74,7 +74,7 @@ Command prompt:
 - `quit` or `q` quits.
 - `wq` saves and quits.
 - `open <path>` opens a file in the current editor.
-- In interactive file mode, `open <path>` opens another buffer and switches to it.
+- In interactive file mode, `open <path>` opens another buffer and switches to it. If the path does not exist, `open <query>` fuzzy-matches project files from the current directory.
 - `reload` reloads the current file from disk.
 - `find <text>` searches in the current file.
 - `next` jumps to the next match.

@@ -310,6 +310,43 @@ static void test_workspace_open_command_adds_buffer_without_replacing_dirty_curr
     tide_workspace_free(&workspace);
 }
 
+static void test_workspace_open_command_resolves_fuzzy_project_file(void)
+{
+    TideWorkspace workspace;
+    int quit = 1;
+
+    write_text_file("test-app-fuzzy-open-unique-target.c", "target");
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-fuzzy-open-start.txt") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "open fuzzyuniquetarget", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(tide_workspace_count(&workspace) == 2);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->path, "test-app-fuzzy-open-unique-target.c");
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->lines[0].data, "target");
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_workspace_open_command_keeps_exact_missing_path_when_no_match_exists(void)
+{
+    TideWorkspace workspace;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-fuzzy-open-start.txt") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "open zzz-no-project-file-match-98765.c", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->path, "zzz-no-project-file-match-98765.c");
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->lines[0].data, "");
+
+    tide_workspace_free(&workspace);
+}
+
 static void test_workspace_buffer_commands_switch_buffers(void)
 {
     TideWorkspace workspace;
@@ -428,6 +465,8 @@ int main(void)
     test_reload_command_refuses_dirty_buffer();
     test_reload_command_requires_file_path();
     test_workspace_open_command_adds_buffer_without_replacing_dirty_current();
+    test_workspace_open_command_resolves_fuzzy_project_file();
+    test_workspace_open_command_keeps_exact_missing_path_when_no_match_exists();
     test_workspace_buffer_commands_switch_buffers();
     test_workspace_buffers_command_lists_open_buffers();
     test_prompt_resolution_executes_selected_fuzzy_command();
