@@ -2,6 +2,7 @@
 #include "tide/buffer.h"
 #include "tide/editor.h"
 #include "tide/string_builder.h"
+#include "tide/workspace.h"
 #include "test_support.h"
 
 #include <stdio.h>
@@ -281,6 +282,83 @@ static void test_reload_command_requires_file_path(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_workspace_open_command_adds_buffer_without_replacing_dirty_current(void)
+{
+    TideWorkspace workspace;
+    TideEditor *editor;
+    int quit = 1;
+
+    write_text_file("test-app-workspace-one.txt", "one");
+    write_text_file("test-app-workspace-two.txt", "two");
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-workspace-one.txt") == TIDE_OK);
+    editor = tide_workspace_current_editor(&workspace);
+    TIDE_ASSERT(editor != NULL);
+    TIDE_ASSERT(tide_editor_insert_char(editor, 'x') == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "open test-app-workspace-two.txt", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(tide_workspace_count(&workspace) == 2);
+    TIDE_ASSERT(tide_workspace_current_index(&workspace) == 1);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->lines[0].data, "two");
+    TIDE_ASSERT(tide_workspace_switch_to(&workspace, 0) == TIDE_OK);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->lines[0].data, "xone");
+    TIDE_ASSERT(tide_workspace_current_editor(&workspace)->buffer->dirty == 1);
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_workspace_buffer_commands_switch_buffers(void)
+{
+    TideWorkspace workspace;
+    int quit = 1;
+
+    write_text_file("test-app-buffer-one.txt", "one");
+    write_text_file("test-app-buffer-two.txt", "two");
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-buffer-one.txt") == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-buffer-two.txt") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "buffer 1", &quit) == TIDE_OK);
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(tide_workspace_current_index(&workspace) == 0);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "bn", &quit) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_current_index(&workspace) == 1);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "bp", &quit) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_current_index(&workspace) == 0);
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_workspace_buffers_command_lists_open_buffers(void)
+{
+    TideWorkspace workspace;
+    TideEditor *editor;
+    int quit = 1;
+
+    write_text_file("test-app-list-one.txt", "one");
+    write_text_file("test-app-list-two.txt", "two");
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-list-one.txt") == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-list-two.txt") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "buffers", &quit) == TIDE_OK);
+
+    editor = tide_workspace_current_editor(&workspace);
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(editor != NULL);
+    TIDE_ASSERT(strstr(editor->status, "1:test-app-list-one.txt") != NULL);
+    TIDE_ASSERT(strstr(editor->status, "2:test-app-list-two.txt") != NULL);
+
+    tide_workspace_free(&workspace);
+}
+
 int main(void)
 {
     test_demo_render_contains_title_and_status();
@@ -297,5 +375,8 @@ int main(void)
     test_reload_command_reloads_current_file_and_resets_editor();
     test_reload_command_refuses_dirty_buffer();
     test_reload_command_requires_file_path();
+    test_workspace_open_command_adds_buffer_without_replacing_dirty_current();
+    test_workspace_buffer_commands_switch_buffers();
+    test_workspace_buffers_command_lists_open_buffers();
     return 0;
 }

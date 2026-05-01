@@ -2,12 +2,13 @@
 
 `tide` is a macOS-first terminal IDE written in C. The project is intentionally built from scratch: no `ncurses`, terminal UI library, JSON library, async library, editor library, or LSP client library.
 
-The current implementation target is Foundation: terminal raw mode, input parsing, virtual screen rendering, ANSI output, layout primitives, and a minimal command-centric app shell.
+The current implementation has the editor core in place and is moving into the Workbench milestone: multiple open buffers, command-centric switching, raw terminal input, virtual screen rendering, ANSI color output, editing, search, undo/redo, file commands, and C syntax highlighting.
 
 ## Design
 
 - [Terminal C IDE Design](docs/superpowers/specs/2026-04-30-terminal-c-ide-design.md)
 - [Foundation Implementation Plan](docs/superpowers/plans/2026-04-30-terminal-c-ide-foundation.md)
+- [Multi-Buffer Workbench V1 Design](docs/superpowers/specs/2026-05-01-multi-buffer-workbench-v1-design.md)
 
 ## Requirements
 
@@ -69,10 +70,15 @@ Command prompt:
 - `quit` or `q` quits.
 - `wq` saves and quits.
 - `open <path>` opens a file in the current editor.
+- In interactive file mode, `open <path>` opens another buffer and switches to it.
 - `reload` reloads the current file from disk.
 - `find <text>` searches in the current file.
 - `next` jumps to the next match.
 - `prev` jumps to the previous match.
 - `undo` reverts the last edit.
 - `redo` reapplies the last undone edit.
+- `buffers` lists open buffers in the status line.
+- `buffer <n>` switches to a 1-based buffer index.
+- `bn` or `next-buffer` switches to the next buffer.
+- `bp` or `prev-buffer` switches to the previous buffer.
 - Escape or Ctrl-P closes the prompt.

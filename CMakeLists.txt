@@ -20,6 +20,7 @@ add_library(tide_core
     src/buffer.c
     src/editor.c
     src/editor_render.c
+    src/workspace.c
 )
 
 target_include_directories(tide_core PUBLIC include)

@@ -7,11 +7,13 @@
 #include "tide/input.h"
 #include "tide/screen.h"
 #include "tide/terminal.h"
+#include "tide/workspace.h"
 
 #include <errno.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -256,6 +258,146 @@ static TideStatus reload_editor_file(TideEditor *editor)
     return replace_editor_file(editor, editor->buffer->path, "reloaded");
 }
 
+static void set_current_buffer_status(TideWorkspace *workspace)
+{
+    TideEditor *editor = tide_workspace_current_editor(workspace);
+    if (editor == NULL) {
+        return;
+    }
+
+    const char *path = editor->buffer->path == NULL ? "[No Name]" : editor->buffer->path;
+    char message[sizeof(editor->status)];
+    snprintf(message, sizeof(message), "buffer %zu: %s", tide_workspace_current_index(workspace) + 1, path);
+    tide_editor_set_status(editor, message);
+}
+
+static TideStatus list_workspace_buffers(TideWorkspace *workspace)
+{
+    TideEditor *editor = tide_workspace_current_editor(workspace);
+    if (editor == NULL) {
+        return TIDE_ERR_INVALID;
+    }
+
+    char message[sizeof(editor->status)];
+    size_t used = 0;
+    int written = snprintf(message, sizeof(message), "buffers:");
+    if (written < 0) {
+        return TIDE_ERR_IO;
+    }
+    used = (size_t)written >= sizeof(message) ? sizeof(message) - 1 : (size_t)written;
+
+    for (size_t i = 0; i < workspace->count && used + 1 < sizeof(message); ++i) {
+        const char *path = workspace->entries[i].buffer.path == NULL ? "[No Name]" : workspace->entries[i].buffer.path;
+        written = snprintf(message + used, sizeof(message) - used, " %zu:%s", i + 1, path);
+        if (written < 0) {
+            return TIDE_ERR_IO;
+        }
+        if ((size_t)written >= sizeof(message) - used) {
+            used = sizeof(message) - 1;
+        } else {
+            used += (size_t)written;
+        }
+    }
+
+    message[sizeof(message) - 1] = '\0';
+    tide_editor_set_status(editor, message);
+    return TIDE_OK;
+}
+
+static TideStatus switch_workspace_buffer(TideWorkspace *workspace, const char *argument)
+{
+    TideEditor *editor = tide_workspace_current_editor(workspace);
+    char *end = NULL;
+    unsigned long requested;
+
+    argument = skip_command_spaces(argument);
+    if (editor == NULL) {
+        return TIDE_ERR_INVALID;
+    }
+    if (argument[0] == '\0') {
+        tide_editor_set_status(editor, "buffer number required");
+        return TIDE_OK;
+    }
+
+    requested = strtoul(argument, &end, 10);
+    end = (char *)skip_command_spaces(end);
+    if (requested == 0 || end == argument || *end != '\0') {
+        tide_editor_set_status(editor, "buffer number required");
+        return TIDE_OK;
+    }
+
+    if (requested > tide_workspace_count(workspace)) {
+        char message[sizeof(editor->status)];
+        snprintf(message, sizeof(message), "no buffer: %lu", requested);
+        tide_editor_set_status(editor, message);
+        return TIDE_OK;
+    }
+
+    TideStatus status = tide_workspace_switch_to(workspace, (size_t)requested - 1);
+    if (status == TIDE_OK) {
+        set_current_buffer_status(workspace);
+    }
+    return status;
+}
+
+TideStatus tide_app_execute_workspace_command(TideWorkspace *workspace, const char *command, int *quit)
+{
+    TideEditor *editor = tide_workspace_current_editor(workspace);
+    *quit = 0;
+
+    if (editor == NULL) {
+        return TIDE_ERR_INVALID;
+    }
+
+    if (strncmp(command, "open", 4) == 0 && (command[4] == '\0' || command[4] == ' ' || command[4] == '\t')) {
+        const char *path = skip_command_spaces(command + 4);
+        if (path[0] == '\0') {
+            tide_editor_set_status(editor, "path required");
+            return TIDE_OK;
+        }
+
+        TideStatus status = tide_workspace_open_file(workspace, path);
+        if (status != TIDE_OK) {
+            tide_editor_set_status(editor, tide_status_string(status));
+            return TIDE_OK;
+        }
+
+        editor = tide_workspace_current_editor(workspace);
+        if (editor != NULL) {
+            char message[sizeof(editor->status)];
+            snprintf(message, sizeof(message), "opened: %s", path);
+            tide_editor_set_status(editor, message);
+        }
+        return TIDE_OK;
+    }
+
+    if (strcmp(command, "buffers") == 0) {
+        return list_workspace_buffers(workspace);
+    }
+
+    if (strcmp(command, "bn") == 0 || strcmp(command, "next-buffer") == 0) {
+        TideStatus status = tide_workspace_next(workspace);
+        if (status == TIDE_OK) {
+            set_current_buffer_status(workspace);
+        }
+        return status;
+    }
+
+    if (strcmp(command, "bp") == 0 || strcmp(command, "prev-buffer") == 0) {
+        TideStatus status = tide_workspace_previous(workspace);
+        if (status == TIDE_OK) {
+            set_current_buffer_status(workspace);
+        }
+        return status;
+    }
+
+    if (strncmp(command, "buffer", 6) == 0 && (command[6] == '\0' || command[6] == ' ' || command[6] == '\t')) {
+        return switch_workspace_buffer(workspace, command + 6);
+    }
+
+    return tide_app_execute_editor_command(editor, command, quit);
+}
+
 TideStatus tide_app_execute_editor_command(TideEditor *editor, const char *command, int *quit)
 {
     *quit = 0;
@@ -316,7 +458,7 @@ TideStatus tide_app_execute_editor_command(TideEditor *editor, const char *comma
     return TIDE_OK;
 }
 
-static TideStatus handle_editor_event(TideEditor *editor, const TideInputEvent *event, int *quit)
+static TideStatus handle_editor_event(TideEditor *editor, TideWorkspace *workspace, const TideInputEvent *event, int *quit)
 {
     *quit = 0;
 
@@ -334,6 +476,9 @@ static TideStatus handle_editor_event(TideEditor *editor, const TideInputEvent *
             char command[TIDE_EDITOR_COMMAND_CAPACITY];
             snprintf(command, sizeof(command), "%s", tide_editor_command_text(editor));
             tide_editor_cancel_command_prompt(editor);
+            if (workspace != NULL) {
+                return tide_app_execute_workspace_command(workspace, command, quit);
+            }
             return tide_app_execute_editor_command(editor, command, quit);
         }
         case TIDE_KEY_BACKSPACE:
@@ -486,8 +631,7 @@ cleanup_signals:
 
 int tide_app_run_file(const char *path)
 {
-    TideBuffer buffer;
-    TideEditor editor;
+    TideWorkspace workspace;
     TideTerminal terminal;
     TideInputParser parser;
     struct sigaction action;
@@ -496,21 +640,22 @@ int tide_app_run_file(const char *path)
     int has_old_int = 0;
     int has_old_term = 0;
     int exit_code = 0;
-    int buffer_loaded = 0;
+    int workspace_initialized = 0;
 
     shutdown_requested = 0;
+    tide_workspace_init(&workspace);
+    workspace_initialized = 1;
     memset(&terminal, 0, sizeof(terminal));
     memset(&action, 0, sizeof(action));
     action.sa_handler = handle_signal;
     sigemptyset(&action.sa_mask);
 
-    TideStatus status = tide_buffer_load_file(&buffer, path);
+    TideStatus status = tide_workspace_open_file(&workspace, path);
     if (status != TIDE_OK) {
         fprintf(stderr, "tide: %s: %s\n", path, tide_status_string(status));
+        tide_workspace_free(&workspace);
         return 1;
     }
-    buffer_loaded = 1;
-    tide_editor_init(&editor, &buffer);
 
     if (sigaction(SIGINT, &action, &old_int) == 0) {
         has_old_int = 1;
@@ -526,7 +671,7 @@ int tide_app_run_file(const char *path)
         goto cleanup_signals;
     }
 
-    status = render_editor_to_terminal(&editor);
+    status = render_editor_to_terminal(tide_workspace_current_editor(&workspace));
     if (status != TIDE_OK) {
         exit_code = 1;
         goto cleanup_terminal;
@@ -548,15 +693,18 @@ int tide_app_run_file(const char *path)
             int should_quit = 0;
             TideInputResult result = tide_input_flush(&parser, &event);
             if (result == TIDE_INPUT_EVENT) {
-                status = handle_editor_event(&editor, &event, &should_quit);
+                status = handle_editor_event(tide_workspace_current_editor(&workspace), &workspace, &event, &should_quit);
                 if (status != TIDE_OK) {
-                    tide_editor_set_status(&editor, tide_status_string(status));
+                    TideEditor *editor = tide_workspace_current_editor(&workspace);
+                    if (editor != NULL) {
+                        tide_editor_set_status(editor, tide_status_string(status));
+                    }
                 }
                 if (should_quit) {
                     shutdown_requested = 1;
                 }
 
-                status = render_editor_to_terminal(&editor);
+                status = render_editor_to_terminal(tide_workspace_current_editor(&workspace));
                 if (status != TIDE_OK) {
                     exit_code = 1;
                     shutdown_requested = 1;
@@ -576,16 +724,19 @@ int tide_app_run_file(const char *path)
                 continue;
             }
 
-            status = handle_editor_event(&editor, &event, &should_quit);
+            status = handle_editor_event(tide_workspace_current_editor(&workspace), &workspace, &event, &should_quit);
             if (status != TIDE_OK) {
-                tide_editor_set_status(&editor, tide_status_string(status));
+                TideEditor *editor = tide_workspace_current_editor(&workspace);
+                if (editor != NULL) {
+                    tide_editor_set_status(editor, tide_status_string(status));
+                }
             }
             if (should_quit) {
                 shutdown_requested = 1;
                 break;
             }
 
-            status = render_editor_to_terminal(&editor);
+            status = render_editor_to_terminal(tide_workspace_current_editor(&workspace));
             if (status != TIDE_OK) {
                 exit_code = 1;
                 shutdown_requested = 1;
@@ -613,8 +764,8 @@ cleanup_signals:
     if (has_old_term) {
         sigaction(SIGTERM, &old_term, NULL);
     }
-    if (buffer_loaded) {
-        tide_buffer_free(&buffer);
+    if (workspace_initialized) {
+        tide_workspace_free(&workspace);
     }
 
     return exit_code;
