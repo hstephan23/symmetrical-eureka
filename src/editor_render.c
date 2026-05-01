@@ -1,9 +1,12 @@
 #include "tide/editor_render.h"
 
+#include "tide/command_palette.h"
 #include "tide/syntax.h"
 
 #include <stdio.h>
 #include <string.h>
+
+#define TIDE_RENDER_PALETTE_MATCHES 4
 
 static TideStatus draw_text(TideScreen *screen, size_t x, size_t y, const char *text, TideCell cell)
 {
@@ -14,6 +17,92 @@ static TideStatus draw_text(TideScreen *screen, size_t x, size_t y, const char *
     for (size_t i = 0; text[i] != '\0' && x + i < screen->width; ++i) {
         cell.ch = text[i];
         TideStatus status = tide_screen_set(screen, x + i, y, cell);
+        if (status != TIDE_OK) {
+            return status;
+        }
+    }
+
+    return TIDE_OK;
+}
+
+static TideStatus fill_row(TideScreen *screen, size_t y, TideCell cell)
+{
+    if (y >= screen->height) {
+        return TIDE_OK;
+    }
+
+    for (size_t x = 0; x < screen->width; ++x) {
+        TideStatus status = tide_screen_set(screen, x, y, cell);
+        if (status != TIDE_OK) {
+            return status;
+        }
+    }
+
+    return TIDE_OK;
+}
+
+static int command_text_has_arguments(const char *command)
+{
+    for (size_t i = 0; command[i] != '\0'; ++i) {
+        if (command[i] == ' ' || command[i] == '\t') {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static size_t command_palette_matches(TideEditor *editor, TideCommandMatch *matches, size_t capacity)
+{
+    const char *query = tide_editor_command_text(editor);
+    if (command_text_has_arguments(query)) {
+        return 0;
+    }
+
+    return tide_command_palette_filter(query, matches, capacity);
+}
+
+static TideStatus draw_command_palette(TideEditor *editor, TideScreen *screen)
+{
+    if (!tide_editor_command_active(editor) || screen->height < 2) {
+        return TIDE_OK;
+    }
+
+    TideCommandMatch matches[TIDE_RENDER_PALETTE_MATCHES];
+    size_t match_count = command_palette_matches(editor, matches, TIDE_RENDER_PALETTE_MATCHES);
+    if (match_count == 0) {
+        return TIDE_OK;
+    }
+
+    size_t status_y = screen->height - 1;
+    size_t start_y = status_y > match_count ? status_y - match_count : 0;
+    size_t selection = tide_editor_command_selection(editor);
+    if (selection >= match_count) {
+        selection = 0;
+    }
+
+    for (size_t i = 0; i < match_count && start_y + i < status_y; ++i) {
+        int selected = i == selection;
+        TideCell row_cell = tide_cell_make(
+            ' ',
+            selected ? TIDE_COLOR_DEFAULT : TIDE_COLOR_CYAN,
+            TIDE_COLOR_DEFAULT,
+            selected ? TIDE_STYLE_REVERSE : TIDE_STYLE_NONE);
+        char line[160];
+        snprintf(
+            line,
+            sizeof(line),
+            "%c %s - %s",
+            selected ? '>' : ' ',
+            matches[i].command->name,
+            matches[i].command->description);
+
+        TideStatus status = fill_row(screen, start_y + i, row_cell);
+        if (status != TIDE_OK) {
+            return status;
+        }
+
+        status = draw_text(screen, 0, start_y + i, line, row_cell);
         if (status != TIDE_OK) {
             return status;
         }
@@ -126,6 +215,11 @@ TideStatus tide_editor_render(TideEditor *editor, TideScreen *screen)
     tide_editor_ensure_cursor_visible(editor, screen->width, screen->height);
 
     TideStatus status = draw_buffer_lines(editor, screen);
+    if (status != TIDE_OK) {
+        return status;
+    }
+
+    status = draw_command_palette(editor, screen);
     if (status != TIDE_OK) {
         return status;
     }

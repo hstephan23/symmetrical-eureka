@@ -99,6 +99,31 @@ static void test_command_prompt_backspace_and_cancel(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_command_prompt_selection_moves_and_resets_on_edit(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    tide_editor_open_command_prompt(&editor);
+
+    TIDE_ASSERT(tide_editor_command_selection(&editor) == 0);
+    tide_editor_command_move_selection(&editor, TIDE_EDITOR_MOVE_DOWN, 3);
+    TIDE_ASSERT(tide_editor_command_selection(&editor) == 1);
+    tide_editor_command_move_selection(&editor, TIDE_EDITOR_MOVE_DOWN, 3);
+    TIDE_ASSERT(tide_editor_command_selection(&editor) == 2);
+    tide_editor_command_move_selection(&editor, TIDE_EDITOR_MOVE_DOWN, 3);
+    TIDE_ASSERT(tide_editor_command_selection(&editor) == 0);
+    tide_editor_command_move_selection(&editor, TIDE_EDITOR_MOVE_UP, 3);
+    TIDE_ASSERT(tide_editor_command_selection(&editor) == 2);
+
+    TIDE_ASSERT(tide_editor_command_insert_char(&editor, 'r') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_command_selection(&editor) == 0);
+
+    tide_buffer_free(&buffer);
+}
+
 static void test_find_moves_cursor_to_first_match_at_or_after_cursor(void)
 {
     TideBuffer buffer;
@@ -281,6 +306,7 @@ int main(void)
     test_arrow_movement_clamps_to_line_lengths();
     test_command_prompt_collects_text_without_editing_buffer();
     test_command_prompt_backspace_and_cancel();
+    test_command_prompt_selection_moves_and_resets_on_edit();
     test_find_moves_cursor_to_first_match_at_or_after_cursor();
     test_find_next_and_previous_wrap();
     test_find_no_match_sets_status_and_keeps_cursor();

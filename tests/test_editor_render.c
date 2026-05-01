@@ -51,6 +51,60 @@ static void test_editor_render_draws_command_prompt_on_status_line(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_editor_render_draws_command_palette_suggestions(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+    TideScreen screen;
+    TideCell cell;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    tide_editor_open_command_prompt(&editor);
+    TIDE_ASSERT(tide_editor_command_insert_char(&editor, 'r') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_command_insert_char(&editor, 'e') == TIDE_OK);
+    TIDE_ASSERT(tide_editor_command_insert_char(&editor, 'l') == TIDE_OK);
+
+    TIDE_ASSERT(tide_screen_init(&screen, 40, 6) == TIDE_OK);
+    TIDE_ASSERT(tide_editor_render(&editor, &screen) == TIDE_OK);
+
+    TIDE_ASSERT(tide_screen_get(&screen, 0, 4, &cell) == TIDE_OK);
+    TIDE_ASSERT(cell.ch == '>');
+    TIDE_ASSERT((cell.style & TIDE_STYLE_REVERSE) != 0);
+    TIDE_ASSERT(tide_screen_get(&screen, 2, 4, &cell) == TIDE_OK);
+    TIDE_ASSERT(cell.ch == 'r');
+    TIDE_ASSERT(tide_screen_get(&screen, 7, 4, &cell) == TIDE_OK);
+    TIDE_ASSERT(cell.ch == 'd');
+
+    tide_screen_free(&screen);
+    tide_buffer_free(&buffer);
+}
+
+static void test_editor_render_marks_selected_palette_row(void)
+{
+    TideBuffer buffer;
+    TideEditor editor;
+    TideScreen screen;
+    TideCell first_row;
+    TideCell second_row;
+
+    TIDE_ASSERT(tide_buffer_init(&buffer) == TIDE_OK);
+    tide_editor_init(&editor, &buffer);
+    tide_editor_open_command_prompt(&editor);
+    tide_editor_command_move_selection(&editor, TIDE_EDITOR_MOVE_DOWN, 4);
+
+    TIDE_ASSERT(tide_screen_init(&screen, 40, 6) == TIDE_OK);
+    TIDE_ASSERT(tide_editor_render(&editor, &screen) == TIDE_OK);
+
+    TIDE_ASSERT(tide_screen_get(&screen, 0, 1, &first_row) == TIDE_OK);
+    TIDE_ASSERT(tide_screen_get(&screen, 0, 2, &second_row) == TIDE_OK);
+    TIDE_ASSERT((first_row.style & TIDE_STYLE_REVERSE) == 0);
+    TIDE_ASSERT((second_row.style & TIDE_STYLE_REVERSE) != 0);
+
+    tide_screen_free(&screen);
+    tide_buffer_free(&buffer);
+}
+
 static void test_editor_render_highlights_current_search_match(void)
 {
     TideBuffer buffer;
@@ -141,6 +195,8 @@ int main(void)
 {
     test_editor_render_draws_text_and_status();
     test_editor_render_draws_command_prompt_on_status_line();
+    test_editor_render_draws_command_palette_suggestions();
+    test_editor_render_marks_selected_palette_row();
     test_editor_render_highlights_current_search_match();
     test_editor_render_applies_c_syntax_colors();
     test_editor_render_keeps_search_reverse_style_on_syntax_color();

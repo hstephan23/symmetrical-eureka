@@ -44,6 +44,7 @@ typedef struct TideEditor {
     TideEditorPromptMode prompt_mode;
     char command[TIDE_EDITOR_COMMAND_CAPACITY];
     size_t command_length;
+    size_t command_selection;
     char search_query[TIDE_EDITOR_SEARCH_CAPACITY];
     size_t search_query_length;
     TideBufferPosition search_match;
@@ -71,6 +72,8 @@ int tide_editor_command_active(const TideEditor *editor);
 TideStatus tide_editor_command_insert_char(TideEditor *editor, char ch);
 void tide_editor_command_backspace(TideEditor *editor);
 const char *tide_editor_command_text(const TideEditor *editor);
+size_t tide_editor_command_selection(const TideEditor *editor);
+void tide_editor_command_move_selection(TideEditor *editor, TideEditorMove move, size_t match_count);
 TideStatus tide_editor_find(TideEditor *editor, const char *query);
 TideStatus tide_editor_find_next(TideEditor *editor);
 TideStatus tide_editor_find_previous(TideEditor *editor);
