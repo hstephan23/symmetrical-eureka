@@ -61,6 +61,7 @@ Interactive keys:
 - Ctrl-S saves.
 - Ctrl-P opens the command prompt.
 - Ctrl-Q quits.
+- C keywords, literals, comments, and preprocessor lines are syntax highlighted.
 
 Command prompt:
 
