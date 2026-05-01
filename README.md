@@ -66,6 +66,10 @@ Interactive keys:
 
 Command prompt:
 
+- Ctrl-P opens a command palette with fuzzy command suggestions.
+- Typing filters suggestions; Up and Down move the selected suggestion.
+- Enter runs the selected suggestion when the prompt contains a command prefix.
+- Commands with arguments, such as `open <path>` and `find <text>`, run as typed.
 - `write`, `save`, or `w` saves.
 - `quit` or `q` quits.
 - `wq` saves and quits.

@@ -123,6 +123,7 @@ void tide_editor_reset_view(TideEditor *editor)
     editor->prompt_mode = TIDE_EDITOR_PROMPT_CLOSED;
     editor->command[0] = '\0';
     editor->command_length = 0;
+    editor->command_selection = 0;
     editor->search_query[0] = '\0';
     editor->search_query_length = 0;
     editor->search_match = (TideBufferPosition){0, 0};
@@ -294,6 +295,7 @@ void tide_editor_open_command_prompt(TideEditor *editor)
     editor->prompt_mode = TIDE_EDITOR_PROMPT_COMMAND;
     editor->command[0] = '\0';
     editor->command_length = 0;
+    editor->command_selection = 0;
     tide_editor_set_status(editor, "");
 }
 
@@ -302,6 +304,7 @@ void tide_editor_cancel_command_prompt(TideEditor *editor)
     editor->prompt_mode = TIDE_EDITOR_PROMPT_CLOSED;
     editor->command[0] = '\0';
     editor->command_length = 0;
+    editor->command_selection = 0;
 }
 
 int tide_editor_command_active(const TideEditor *editor)
@@ -320,6 +323,7 @@ TideStatus tide_editor_command_insert_char(TideEditor *editor, char ch)
 
     editor->command[editor->command_length++] = ch;
     editor->command[editor->command_length] = '\0';
+    editor->command_selection = 0;
     return TIDE_OK;
 }
 
@@ -331,11 +335,35 @@ void tide_editor_command_backspace(TideEditor *editor)
 
     editor->command_length--;
     editor->command[editor->command_length] = '\0';
+    editor->command_selection = 0;
 }
 
 const char *tide_editor_command_text(const TideEditor *editor)
 {
     return editor->command;
+}
+
+size_t tide_editor_command_selection(const TideEditor *editor)
+{
+    return editor->command_selection;
+}
+
+void tide_editor_command_move_selection(TideEditor *editor, TideEditorMove move, size_t match_count)
+{
+    if (!tide_editor_command_active(editor) || match_count == 0) {
+        editor->command_selection = 0;
+        return;
+    }
+
+    if (editor->command_selection >= match_count) {
+        editor->command_selection = 0;
+    }
+
+    if (move == TIDE_EDITOR_MOVE_DOWN) {
+        editor->command_selection = (editor->command_selection + 1) % match_count;
+    } else if (move == TIDE_EDITOR_MOVE_UP) {
+        editor->command_selection = editor->command_selection == 0 ? match_count - 1 : editor->command_selection - 1;
+    }
 }
 
 static int line_find_between(const char *line, size_t line_length, const char *query, size_t query_length, size_t start_column, size_t end_column, size_t *match_column)

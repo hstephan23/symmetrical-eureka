@@ -2,6 +2,7 @@
 
 #include "tide/ansi.h"
 #include "tide/buffer.h"
+#include "tide/command_palette.h"
 #include "tide/editor.h"
 #include "tide/editor_render.h"
 #include "tide/input.h"
@@ -17,6 +18,8 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+
+#define TIDE_APP_PALETTE_MATCHES 4
 
 static volatile sig_atomic_t shutdown_requested = 0;
 
@@ -203,6 +206,52 @@ static const char *skip_command_spaces(const char *text)
         text++;
     }
     return text;
+}
+
+static int command_text_has_arguments(const char *command)
+{
+    for (size_t i = 0; command[i] != '\0'; ++i) {
+        if (command[i] == ' ' || command[i] == '\t') {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static size_t prompt_match_count(const TideEditor *editor)
+{
+    TideCommandMatch matches[TIDE_APP_PALETTE_MATCHES];
+    const char *command = tide_editor_command_text(editor);
+    if (command_text_has_arguments(command)) {
+        return 0;
+    }
+
+    return tide_command_palette_filter(command, matches, TIDE_APP_PALETTE_MATCHES);
+}
+
+TideStatus tide_app_resolve_prompt_command(const TideEditor *editor, char *out, size_t out_size)
+{
+    if (out_size == 0 || !tide_editor_command_active(editor)) {
+        return TIDE_ERR_INVALID;
+    }
+
+    const char *command = tide_editor_command_text(editor);
+    if (!command_text_has_arguments(command)) {
+        TideCommandMatch matches[TIDE_APP_PALETTE_MATCHES];
+        size_t match_count = tide_command_palette_filter(command, matches, TIDE_APP_PALETTE_MATCHES);
+        size_t selection = tide_editor_command_selection(editor);
+        if (match_count > 0) {
+            if (selection >= match_count) {
+                selection = 0;
+            }
+            snprintf(out, out_size, "%s", matches[selection].command->name);
+            return TIDE_OK;
+        }
+    }
+
+    snprintf(out, out_size, "%s", command);
+    return TIDE_OK;
 }
 
 static TideStatus replace_editor_file(TideEditor *editor, const char *path, const char *success_status)
@@ -474,13 +523,22 @@ static TideStatus handle_editor_event(TideEditor *editor, TideWorkspace *workspa
         switch (event->key) {
         case TIDE_KEY_ENTER: {
             char command[TIDE_EDITOR_COMMAND_CAPACITY];
-            snprintf(command, sizeof(command), "%s", tide_editor_command_text(editor));
+            TideStatus status = tide_app_resolve_prompt_command(editor, command, sizeof(command));
             tide_editor_cancel_command_prompt(editor);
+            if (status != TIDE_OK) {
+                return status;
+            }
             if (workspace != NULL) {
                 return tide_app_execute_workspace_command(workspace, command, quit);
             }
             return tide_app_execute_editor_command(editor, command, quit);
         }
+        case TIDE_KEY_ARROW_UP:
+            tide_editor_command_move_selection(editor, TIDE_EDITOR_MOVE_UP, prompt_match_count(editor));
+            return TIDE_OK;
+        case TIDE_KEY_ARROW_DOWN:
+            tide_editor_command_move_selection(editor, TIDE_EDITOR_MOVE_DOWN, prompt_match_count(editor));
+            return TIDE_OK;
         case TIDE_KEY_BACKSPACE:
             tide_editor_command_backspace(editor);
             return TIDE_OK;
