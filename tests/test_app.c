@@ -448,6 +448,64 @@ static void test_prompt_resolution_preserves_argument_command(void)
     tide_buffer_free(&buffer);
 }
 
+static void test_session_commands_save_and_load_workspace(void)
+{
+    TideWorkspace workspace;
+    int quit = 1;
+
+    write_text_file("test-app-session-one.c", "one");
+    write_text_file("test-app-session-two.c", "two");
+    write_text_file("test-app-session-old.c", "old");
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-session-one.c") == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-session-two.c") == TIDE_OK);
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "session-save test-app-session.tide", &quit) == TIDE_OK);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->status, "session saved: test-app-session.tide");
+    tide_workspace_free(&workspace);
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-session-old.c") == TIDE_OK);
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "session-load test-app-session.tide", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(tide_workspace_count(&workspace) == 2);
+    TIDE_ASSERT(tide_workspace_current_index(&workspace) == 1);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->path, "test-app-session-two.c");
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->lines[0].data, "two");
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->status, "session loaded: test-app-session.tide");
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_session_load_refuses_dirty_workspace(void)
+{
+    TideWorkspace clean;
+    TideWorkspace dirty;
+    int quit = 1;
+
+    write_text_file("test-app-session-clean.c", "clean");
+    write_text_file("test-app-session-dirty.c", "dirty");
+
+    TIDE_ASSERT(tide_workspace_init(&clean) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&clean, "test-app-session-clean.c") == TIDE_OK);
+    TIDE_ASSERT(tide_app_execute_workspace_command(&clean, "session-save test-app-session-dirty-refuse.tide", &quit) == TIDE_OK);
+    tide_workspace_free(&clean);
+
+    TIDE_ASSERT(tide_workspace_init(&dirty) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&dirty, "test-app-session-dirty.c") == TIDE_OK);
+    TIDE_ASSERT(tide_editor_insert_char(tide_workspace_current_editor(&dirty), 'x') == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&dirty, "session-load test-app-session-dirty-refuse.tide", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(tide_workspace_count(&dirty) == 1);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&dirty)->buffer->path, "test-app-session-dirty.c");
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&dirty)->status, "unsaved changes; write first");
+
+    tide_workspace_free(&dirty);
+}
+
 int main(void)
 {
     test_demo_render_contains_title_and_status();
@@ -471,5 +529,7 @@ int main(void)
     test_workspace_buffers_command_lists_open_buffers();
     test_prompt_resolution_executes_selected_fuzzy_command();
     test_prompt_resolution_preserves_argument_command();
+    test_session_commands_save_and_load_workspace();
+    test_session_load_refuses_dirty_workspace();
     return 0;
 }

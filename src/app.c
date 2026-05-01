@@ -8,6 +8,7 @@
 #include "tide/input.h"
 #include "tide/project_files.h"
 #include "tide/screen.h"
+#include "tide/session.h"
 #include "tide/terminal.h"
 #include "tide/workspace.h"
 
@@ -22,6 +23,7 @@
 
 #define TIDE_APP_PALETTE_MATCHES 4
 #define TIDE_APP_OPEN_PATH_CAPACITY 1024
+#define TIDE_APP_DEFAULT_SESSION_PATH ".tide-session"
 
 static volatile sig_atomic_t shutdown_requested = 0;
 
@@ -391,6 +393,69 @@ static TideStatus switch_workspace_buffer(TideWorkspace *workspace, const char *
     return status;
 }
 
+static int workspace_has_dirty_buffers(const TideWorkspace *workspace)
+{
+    for (size_t i = 0; i < workspace->count; ++i) {
+        if (workspace->entries[i].buffer.dirty) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static const char *session_command_path(const char *argument)
+{
+    argument = skip_command_spaces(argument);
+    return argument[0] == '\0' ? TIDE_APP_DEFAULT_SESSION_PATH : argument;
+}
+
+static TideStatus save_workspace_session(TideWorkspace *workspace, const char *argument)
+{
+    TideEditor *editor = tide_workspace_current_editor(workspace);
+    const char *path = session_command_path(argument);
+    TideStatus status = tide_session_save_workspace(workspace, path);
+    if (editor == NULL) {
+        return status;
+    }
+
+    char message[sizeof(editor->status)];
+    snprintf(message, sizeof(message), "session %s: %s", status == TIDE_OK ? "saved" : "error", path);
+    tide_editor_set_status(editor, status == TIDE_OK ? message : tide_status_string(status));
+    return TIDE_OK;
+}
+
+static TideStatus load_workspace_session(TideWorkspace *workspace, const char *argument)
+{
+    TideEditor *editor = tide_workspace_current_editor(workspace);
+    const char *path = session_command_path(argument);
+
+    if (editor == NULL) {
+        return TIDE_ERR_INVALID;
+    }
+
+    if (workspace_has_dirty_buffers(workspace)) {
+        tide_editor_set_status(editor, "unsaved changes; write first");
+        return TIDE_OK;
+    }
+
+    TideStatus status = tide_session_load_workspace(workspace, path);
+    editor = tide_workspace_current_editor(workspace);
+    if (editor == NULL) {
+        return status;
+    }
+
+    if (status != TIDE_OK) {
+        tide_editor_set_status(editor, tide_status_string(status));
+        return TIDE_OK;
+    }
+
+    char message[sizeof(editor->status)];
+    snprintf(message, sizeof(message), "session loaded: %s", path);
+    tide_editor_set_status(editor, message);
+    return TIDE_OK;
+}
+
 static TideStatus resolve_project_open_path(const char *argument, char *out, size_t out_size)
 {
     if (out_size == 0) {
@@ -483,6 +548,14 @@ TideStatus tide_app_execute_workspace_command(TideWorkspace *workspace, const ch
 
     if (strncmp(command, "buffer", 6) == 0 && (command[6] == '\0' || command[6] == ' ' || command[6] == '\t')) {
         return switch_workspace_buffer(workspace, command + 6);
+    }
+
+    if (strncmp(command, "session-save", 12) == 0 && (command[12] == '\0' || command[12] == ' ' || command[12] == '\t')) {
+        return save_workspace_session(workspace, command + 12);
+    }
+
+    if (strncmp(command, "session-load", 12) == 0 && (command[12] == '\0' || command[12] == ' ' || command[12] == '\t')) {
+        return load_workspace_session(workspace, command + 12);
     }
 
     return tide_app_execute_editor_command(editor, command, quit);

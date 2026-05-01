@@ -16,6 +16,7 @@ add_library(tide_core
     src/syntax.c
     src/command_palette.c
     src/project_files.c
+    src/session.c
     src/ansi.c
     src/terminal.c
     src/app.c

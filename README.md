@@ -85,4 +85,6 @@ Command prompt:
 - `buffer <n>` switches to a 1-based buffer index.
 - `bn` or `next-buffer` switches to the next buffer.
 - `bp` or `prev-buffer` switches to the previous buffer.
+- `session-save [path]` saves open buffers and the current buffer to a session file. Defaults to `.tide-session`.
+- `session-load [path]` loads a saved session. Defaults to `.tide-session` and refuses to load when any open buffer is dirty.
 - Escape or Ctrl-P closes the prompt.
