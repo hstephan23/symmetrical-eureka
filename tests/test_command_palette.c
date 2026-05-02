@@ -48,6 +48,14 @@ static void test_exact_lookup_finds_command(void)
     TIDE_ASSERT(tide_command_palette_find("missing") == NULL);
 }
 
+static void test_exact_lookup_finds_build_command(void)
+{
+    const TideCommandDefinition *command = tide_command_palette_find("build");
+
+    TIDE_ASSERT(command != NULL);
+    TIDE_ASSERT_STR_EQ(command->description, "run build command");
+}
+
 int main(void)
 {
     test_empty_query_returns_catalog_order();
@@ -55,5 +63,6 @@ int main(void)
     test_filter_prefers_prefix_and_tighter_match();
     test_filter_prefers_exact_command_over_longer_prefix();
     test_exact_lookup_finds_command();
+    test_exact_lookup_finds_build_command();
     return 0;
 }

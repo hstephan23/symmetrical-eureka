@@ -49,6 +49,51 @@ static int find_open_path(const TideWorkspace *workspace, const char *path, size
     return 0;
 }
 
+static TideStatus load_text_buffer(TideBuffer *buffer, const char *path, const char *text)
+{
+    TideStatus status;
+    size_t line = 0;
+    size_t column = 0;
+
+    if (path == NULL || path[0] == '\0' || text == NULL) {
+        return TIDE_ERR_INVALID;
+    }
+
+    status = tide_buffer_init(buffer);
+    if (status != TIDE_OK) {
+        return status;
+    }
+
+    status = tide_buffer_set_path(buffer, path);
+    if (status != TIDE_OK) {
+        tide_buffer_free(buffer);
+        return status;
+    }
+
+    for (size_t i = 0; text[i] != '\0'; ++i) {
+        if (text[i] == '\n') {
+            status = tide_buffer_insert_newline(buffer, line, column);
+            if (status != TIDE_OK) {
+                tide_buffer_free(buffer);
+                return status;
+            }
+            line++;
+            column = 0;
+            continue;
+        }
+
+        status = tide_buffer_insert_char(buffer, line, column, text[i]);
+        if (status != TIDE_OK) {
+            tide_buffer_free(buffer);
+            return status;
+        }
+        column++;
+    }
+
+    buffer->dirty = 0;
+    return TIDE_OK;
+}
+
 TideStatus tide_workspace_init(TideWorkspace *workspace)
 {
     workspace->entries = NULL;
@@ -94,6 +139,40 @@ TideStatus tide_workspace_open_file(TideWorkspace *workspace, const char *path)
         return status;
     }
 
+    tide_editor_init(&entry->editor, &entry->buffer);
+    workspace->current = workspace->count;
+    workspace->count++;
+    return TIDE_OK;
+}
+
+TideStatus tide_workspace_open_text(TideWorkspace *workspace, const char *path, const char *text)
+{
+    TideBuffer buffer;
+    TideStatus status;
+    size_t existing;
+
+    status = load_text_buffer(&buffer, path, text);
+    if (status != TIDE_OK) {
+        return status;
+    }
+
+    if (find_open_path(workspace, path, &existing)) {
+        TideBuffer old = workspace->entries[existing].buffer;
+        workspace->entries[existing].buffer = buffer;
+        tide_buffer_free(&old);
+        tide_editor_init(&workspace->entries[existing].editor, &workspace->entries[existing].buffer);
+        workspace->current = existing;
+        return TIDE_OK;
+    }
+
+    status = ensure_capacity(workspace, workspace->count + 1);
+    if (status != TIDE_OK) {
+        tide_buffer_free(&buffer);
+        return status;
+    }
+
+    TideWorkspaceEntry *entry = &workspace->entries[workspace->count];
+    entry->buffer = buffer;
     tide_editor_init(&entry->editor, &entry->buffer);
     workspace->current = workspace->count;
     workspace->count++;

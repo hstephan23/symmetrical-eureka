@@ -22,6 +22,7 @@ typedef struct TideWorkspace {
 TideStatus tide_workspace_init(TideWorkspace *workspace);
 void tide_workspace_free(TideWorkspace *workspace);
 TideStatus tide_workspace_open_file(TideWorkspace *workspace, const char *path);
+TideStatus tide_workspace_open_text(TideWorkspace *workspace, const char *path, const char *text);
 TideStatus tide_workspace_switch_to(TideWorkspace *workspace, size_t index);
 TideStatus tide_workspace_next(TideWorkspace *workspace);
 TideStatus tide_workspace_previous(TideWorkspace *workspace);

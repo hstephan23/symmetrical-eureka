@@ -506,6 +506,51 @@ static void test_session_load_refuses_dirty_workspace(void)
     tide_workspace_free(&dirty);
 }
 
+static void test_build_command_opens_output_buffer_for_success(void)
+{
+    TideWorkspace workspace;
+    TideEditor *editor;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-build-start.c") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "build printf build-ok", &quit) == TIDE_OK);
+
+    editor = tide_workspace_current_editor(&workspace);
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(editor != NULL);
+    TIDE_ASSERT_STR_EQ(editor->buffer->path, "*build-output*");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[0].data, "$ printf build-ok");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[1].data, "build-ok");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[2].data, "[exit 0]");
+    TIDE_ASSERT_STR_EQ(editor->status, "build passed");
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_build_command_reports_nonzero_exit(void)
+{
+    TideWorkspace workspace;
+    TideEditor *editor;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-build-start.c") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "build printf build-fail; exit 7", &quit) == TIDE_OK);
+
+    editor = tide_workspace_current_editor(&workspace);
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(editor != NULL);
+    TIDE_ASSERT_STR_EQ(editor->buffer->path, "*build-output*");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[1].data, "build-fail");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[2].data, "[exit 7]");
+    TIDE_ASSERT_STR_EQ(editor->status, "build failed: exit 7");
+
+    tide_workspace_free(&workspace);
+}
+
 int main(void)
 {
     test_demo_render_contains_title_and_status();
@@ -531,5 +576,7 @@ int main(void)
     test_prompt_resolution_preserves_argument_command();
     test_session_commands_save_and_load_workspace();
     test_session_load_refuses_dirty_workspace();
+    test_build_command_opens_output_buffer_for_success();
+    test_build_command_reports_nonzero_exit();
     return 0;
 }

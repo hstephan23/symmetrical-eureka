@@ -87,4 +87,5 @@ Command prompt:
 - `bp` or `prev-buffer` switches to the previous buffer.
 - `session-save [path]` saves open buffers and the current buffer to a session file. Defaults to `.tide-session`.
 - `session-load [path]` loads a saved session. Defaults to `.tide-session` and refuses to load when any open buffer is dirty.
+- `build [command]` runs a build command and opens the captured output in `*build-output*`. Defaults to `cmake --build build`.
 - Escape or Ctrl-P closes the prompt.

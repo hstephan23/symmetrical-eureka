@@ -95,11 +95,36 @@ static void test_growth_keeps_editor_buffer_pointers_valid(void)
     tide_workspace_free(&workspace);
 }
 
+static void test_open_text_adds_and_replaces_named_buffer(void)
+{
+    TideWorkspace workspace;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_text(&workspace, "*build-output*", "one\ntwo") == TIDE_OK);
+
+    TIDE_ASSERT(tide_workspace_count(&workspace) == 1);
+    TIDE_ASSERT(tide_workspace_current_index(&workspace) == 0);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->path, "*build-output*");
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->lines[0].data, "one");
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->lines[1].data, "two");
+    TIDE_ASSERT(tide_workspace_current_editor(&workspace)->buffer->dirty == 0);
+
+    TIDE_ASSERT(tide_workspace_open_text(&workspace, "*build-output*", "fresh") == TIDE_OK);
+
+    TIDE_ASSERT(tide_workspace_count(&workspace) == 1);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->lines[0].data, "fresh");
+    TIDE_ASSERT(tide_workspace_current_editor(&workspace)->cursor.line == 0);
+    TIDE_ASSERT(tide_workspace_current_editor(&workspace)->cursor.column == 0);
+
+    tide_workspace_free(&workspace);
+}
+
 int main(void)
 {
     test_open_files_switches_current_buffer();
     test_open_existing_path_reuses_buffer();
     test_next_and_previous_wrap();
     test_growth_keeps_editor_buffer_pointers_valid();
+    test_open_text_adds_and_replaces_named_buffer();
     return 0;
 }
