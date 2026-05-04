@@ -23,6 +23,7 @@ static void test_demo_render_contains_title_and_status(void)
     TIDE_ASSERT(tide_string_builder_init(&out) == TIDE_OK);
     TIDE_ASSERT(tide_app_render_demo(20, 5, &out) == TIDE_OK);
 
+    TIDE_ASSERT(strncmp(tide_string_builder_data(&out), "\x1b[2J", 4) == 0);
     TIDE_ASSERT(strstr(tide_string_builder_data(&out), "tide") != NULL);
     TIDE_ASSERT(strstr(tide_string_builder_data(&out), "q: quit") != NULL);
     TIDE_ASSERT(strstr(tide_string_builder_data(&out), "\x1b[?25h") != NULL);
