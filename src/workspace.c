@@ -100,7 +100,7 @@ TideStatus tide_workspace_init(TideWorkspace *workspace)
     workspace->count = 0;
     workspace->capacity = 0;
     workspace->current = 0;
-    return TIDE_OK;
+    return tide_diagnostics_init(&workspace->diagnostics);
 }
 
 void tide_workspace_free(TideWorkspace *workspace)
@@ -110,6 +110,7 @@ void tide_workspace_free(TideWorkspace *workspace)
     }
 
     free(workspace->entries);
+    tide_diagnostics_free(&workspace->diagnostics);
     workspace->entries = NULL;
     workspace->count = 0;
     workspace->capacity = 0;
@@ -235,4 +236,19 @@ size_t tide_workspace_count(const TideWorkspace *workspace)
 size_t tide_workspace_current_index(const TideWorkspace *workspace)
 {
     return workspace->current;
+}
+
+TideDiagnostics *tide_workspace_diagnostics(TideWorkspace *workspace)
+{
+    return &workspace->diagnostics;
+}
+
+const TideDiagnostics *tide_workspace_diagnostics_const(const TideWorkspace *workspace)
+{
+    return &workspace->diagnostics;
+}
+
+TideStatus tide_workspace_parse_diagnostics(TideWorkspace *workspace, const char *output)
+{
+    return tide_diagnostics_parse_output(&workspace->diagnostics, output);
 }

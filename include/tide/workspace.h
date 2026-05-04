@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "tide/buffer.h"
+#include "tide/diagnostics.h"
 #include "tide/editor.h"
 #include "tide/status.h"
 
@@ -17,6 +18,7 @@ typedef struct TideWorkspace {
     size_t count;
     size_t capacity;
     size_t current;
+    TideDiagnostics diagnostics;
 } TideWorkspace;
 
 TideStatus tide_workspace_init(TideWorkspace *workspace);
@@ -30,5 +32,8 @@ TideEditor *tide_workspace_current_editor(TideWorkspace *workspace);
 const TideEditor *tide_workspace_current_editor_const(const TideWorkspace *workspace);
 size_t tide_workspace_count(const TideWorkspace *workspace);
 size_t tide_workspace_current_index(const TideWorkspace *workspace);
+TideDiagnostics *tide_workspace_diagnostics(TideWorkspace *workspace);
+const TideDiagnostics *tide_workspace_diagnostics_const(const TideWorkspace *workspace);
+TideStatus tide_workspace_parse_diagnostics(TideWorkspace *workspace, const char *output);
 
 #endif

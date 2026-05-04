@@ -551,6 +551,108 @@ static void test_build_command_reports_nonzero_exit(void)
     tide_workspace_free(&workspace);
 }
 
+static void test_build_command_opens_diagnostics_buffer_when_diagnostics_exist(void)
+{
+    TideWorkspace workspace;
+    TideEditor *editor;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-build-start.c") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(
+                    &workspace,
+                    "build printf 'test-app-diagnostic-source.c:2:3: error: bad token\\n'; exit 1",
+                    &quit) == TIDE_OK);
+
+    editor = tide_workspace_current_editor(&workspace);
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(editor != NULL);
+    TIDE_ASSERT(tide_diagnostics_count(tide_workspace_diagnostics(&workspace)) == 1);
+    TIDE_ASSERT_STR_EQ(editor->buffer->path, "*diagnostics*");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[0].data, "1. error test-app-diagnostic-source.c:2:3 bad token");
+    TIDE_ASSERT_STR_EQ(editor->status, "build failed: 1 diagnostic");
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_build_command_clears_stale_diagnostics_on_clean_output(void)
+{
+    TideWorkspace workspace;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-build-start.c") == TIDE_OK);
+    TIDE_ASSERT(tide_app_execute_workspace_command(
+                    &workspace,
+                    "build printf 'test-app-stale.c:1:1: error: old\\n'; exit 1",
+                    &quit) == TIDE_OK);
+    TIDE_ASSERT(tide_diagnostics_count(tide_workspace_diagnostics(&workspace)) == 1);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "build printf clean", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(tide_diagnostics_count(tide_workspace_diagnostics(&workspace)) == 0);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->path, "*build-output*");
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->status, "build passed");
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_diagnostic_next_jumps_to_current_diagnostic_source(void)
+{
+    TideWorkspace workspace;
+    TideEditor *editor;
+    int quit = 1;
+
+    write_text_file("test-app-diag-nav.c", "one\ntwo\nthree\n");
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-build-start.c") == TIDE_OK);
+    TIDE_ASSERT(tide_app_execute_workspace_command(
+                    &workspace,
+                    "build printf 'test-app-diag-nav.c:2:3: warning: jump here\\ntest-app-diag-other.c:1:1: error: later\\n'; exit 1",
+                    &quit) == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "dn", &quit) == TIDE_OK);
+
+    editor = tide_workspace_current_editor(&workspace);
+    TIDE_ASSERT(editor != NULL);
+    TIDE_ASSERT_STR_EQ(editor->buffer->path, "test-app-diag-nav.c");
+    TIDE_ASSERT(editor->cursor.line == 1);
+    TIDE_ASSERT(editor->cursor.column == 2);
+    TIDE_ASSERT_STR_EQ(editor->status, "diagnostic 1/2: warning: jump here");
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_diagnostic_previous_wraps_and_jumps_to_source(void)
+{
+    TideWorkspace workspace;
+    TideEditor *editor;
+    int quit = 1;
+
+    write_text_file("test-app-diag-first.c", "first\n");
+    write_text_file("test-app-diag-second.c", "a\nbc\n");
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-build-start.c") == TIDE_OK);
+    TIDE_ASSERT(tide_app_execute_workspace_command(
+                    &workspace,
+                    "build printf 'test-app-diag-first.c:1:1: error: first\\ntest-app-diag-second.c:2:2: note: second\\n'; exit 1",
+                    &quit) == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "dp", &quit) == TIDE_OK);
+
+    editor = tide_workspace_current_editor(&workspace);
+    TIDE_ASSERT(editor != NULL);
+    TIDE_ASSERT_STR_EQ(editor->buffer->path, "test-app-diag-second.c");
+    TIDE_ASSERT(editor->cursor.line == 1);
+    TIDE_ASSERT(editor->cursor.column == 1);
+    TIDE_ASSERT_STR_EQ(editor->status, "diagnostic 2/2: note: second");
+
+    tide_workspace_free(&workspace);
+}
+
 int main(void)
 {
     test_demo_render_contains_title_and_status();
@@ -578,5 +680,9 @@ int main(void)
     test_session_load_refuses_dirty_workspace();
     test_build_command_opens_output_buffer_for_success();
     test_build_command_reports_nonzero_exit();
+    test_build_command_opens_diagnostics_buffer_when_diagnostics_exist();
+    test_build_command_clears_stale_diagnostics_on_clean_output();
+    test_diagnostic_next_jumps_to_current_diagnostic_source();
+    test_diagnostic_previous_wraps_and_jumps_to_source();
     return 0;
 }

@@ -88,4 +88,8 @@ Command prompt:
 - `session-save [path]` saves open buffers and the current buffer to a session file. Defaults to `.tide-session`.
 - `session-load [path]` loads a saved session. Defaults to `.tide-session` and refuses to load when any open buffer is dirty.
 - `build [command]` runs a build command and opens the captured output in `*build-output*`. Defaults to `cmake --build build`.
+- If build output contains Clang-style diagnostics, `*diagnostics*` opens with parsed file, line, column, severity, and message entries.
+- `diagnostics` opens the current diagnostics list.
+- `dn` or `diagnostic-next` jumps to the next build diagnostic.
+- `dp` or `diagnostic-prev` jumps to the previous build diagnostic.
 - Escape or Ctrl-P closes the prompt.

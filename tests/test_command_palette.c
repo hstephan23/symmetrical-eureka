@@ -56,6 +56,16 @@ static void test_exact_lookup_finds_build_command(void)
     TIDE_ASSERT_STR_EQ(command->description, "run build command");
 }
 
+static void test_exact_lookup_finds_diagnostic_commands(void)
+{
+    const TideCommandDefinition *command = tide_command_palette_find("diagnostics");
+
+    TIDE_ASSERT(command != NULL);
+    TIDE_ASSERT_STR_EQ(command->description, "show build diagnostics");
+    TIDE_ASSERT(tide_command_palette_find("diagnostic-next") != NULL);
+    TIDE_ASSERT(tide_command_palette_find("diagnostic-prev") != NULL);
+}
+
 int main(void)
 {
     test_empty_query_returns_catalog_order();
@@ -64,5 +74,6 @@ int main(void)
     test_filter_prefers_exact_command_over_longer_prefix();
     test_exact_lookup_finds_command();
     test_exact_lookup_finds_build_command();
+    test_exact_lookup_finds_diagnostic_commands();
     return 0;
 }

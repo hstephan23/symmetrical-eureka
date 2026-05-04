@@ -27,6 +27,7 @@
 #define TIDE_APP_DEFAULT_SESSION_PATH ".tide-session"
 #define TIDE_APP_DEFAULT_BUILD_COMMAND "cmake --build build"
 #define TIDE_APP_BUILD_OUTPUT_PATH "*build-output*"
+#define TIDE_APP_DIAGNOSTICS_PATH "*diagnostics*"
 
 static volatile sig_atomic_t shutdown_requested = 0;
 
@@ -512,6 +513,189 @@ static TideStatus set_build_output_status(TideWorkspace *workspace, int exit_cod
     return TIDE_OK;
 }
 
+static const char *diagnostic_word(size_t count)
+{
+    return count == 1 ? "diagnostic" : "diagnostics";
+}
+
+static TideStatus append_diagnostics_output(TideStringBuilder *output, const TideDiagnostics *diagnostics)
+{
+    char line[TIDE_DIAGNOSTIC_PATH_CAPACITY + TIDE_DIAGNOSTIC_MESSAGE_CAPACITY + 96];
+
+    for (size_t i = 0; i < tide_diagnostics_count(diagnostics); ++i) {
+        const TideDiagnostic *diagnostic = tide_diagnostics_at(diagnostics, i);
+        int written;
+        if (diagnostic == NULL) {
+            return TIDE_ERR_INVALID;
+        }
+
+        written = snprintf(
+            line,
+            sizeof(line),
+            "%zu. %s %s:%zu:%zu %s\n",
+            i + 1,
+            tide_diagnostic_severity_label(diagnostic->severity),
+            diagnostic->path,
+            diagnostic->line,
+            diagnostic->column,
+            diagnostic->message);
+        if (written < 0) {
+            return TIDE_ERR_IO;
+        }
+        if ((size_t)written >= sizeof(line)) {
+            line[sizeof(line) - 2] = '\n';
+            line[sizeof(line) - 1] = '\0';
+        }
+
+        TideStatus status = tide_string_builder_append(output, line);
+        if (status != TIDE_OK) {
+            return status;
+        }
+    }
+
+    return TIDE_OK;
+}
+
+static TideStatus open_diagnostics_buffer(TideWorkspace *workspace)
+{
+    TideStringBuilder output;
+    TideStatus status;
+    const TideDiagnostics *diagnostics = tide_workspace_diagnostics_const(workspace);
+
+    if (tide_diagnostics_count(diagnostics) == 0) {
+        TideEditor *editor = tide_workspace_current_editor(workspace);
+        if (editor != NULL) {
+            tide_editor_set_status(editor, "no diagnostics");
+        }
+        return TIDE_OK;
+    }
+
+    status = tide_string_builder_init(&output);
+    if (status != TIDE_OK) {
+        return status;
+    }
+
+    status = append_diagnostics_output(&output, diagnostics);
+    if (status == TIDE_OK) {
+        status = tide_workspace_open_text(workspace, TIDE_APP_DIAGNOSTICS_PATH, tide_string_builder_data(&output));
+    }
+
+    tide_string_builder_free(&output);
+    return status;
+}
+
+static TideStatus set_build_diagnostics_status(TideWorkspace *workspace, int exit_code)
+{
+    TideEditor *editor = tide_workspace_current_editor(workspace);
+    size_t count = tide_diagnostics_count(tide_workspace_diagnostics_const(workspace));
+
+    if (editor == NULL) {
+        return TIDE_ERR_INVALID;
+    }
+
+    char message[sizeof(editor->status)];
+    snprintf(
+        message,
+        sizeof(message),
+        "build %s: %zu %s",
+        exit_code == 0 ? "passed" : "failed",
+        count,
+        diagnostic_word(count));
+    tide_editor_set_status(editor, message);
+    return TIDE_OK;
+}
+
+static int current_buffer_is_diagnostics(const TideWorkspace *workspace)
+{
+    const TideEditor *editor = tide_workspace_current_editor_const(workspace);
+    return editor != NULL && editor->buffer->path != NULL && strcmp(editor->buffer->path, TIDE_APP_DIAGNOSTICS_PATH) == 0;
+}
+
+static TideStatus jump_to_current_diagnostic(TideWorkspace *workspace)
+{
+    TideDiagnostics *diagnostics = tide_workspace_diagnostics(workspace);
+    const TideDiagnostic *diagnostic = tide_diagnostics_current(diagnostics);
+    TideStatus status;
+    TideEditor *editor;
+    size_t line;
+    size_t column;
+    char message[128];
+
+    if (diagnostic == NULL) {
+        editor = tide_workspace_current_editor(workspace);
+        if (editor != NULL) {
+            tide_editor_set_status(editor, "no diagnostics");
+        }
+        return TIDE_OK;
+    }
+
+    status = tide_workspace_open_file(workspace, diagnostic->path);
+    editor = tide_workspace_current_editor(workspace);
+    if (status != TIDE_OK) {
+        if (editor != NULL) {
+            tide_editor_set_status(editor, tide_status_string(status));
+        }
+        return TIDE_OK;
+    }
+
+    editor = tide_workspace_current_editor(workspace);
+    if (editor == NULL) {
+        return TIDE_ERR_INVALID;
+    }
+
+    line = diagnostic->line == 0 ? 0 : diagnostic->line - 1;
+    if (line >= editor->buffer->line_count && editor->buffer->line_count > 0) {
+        line = editor->buffer->line_count - 1;
+    }
+
+    column = diagnostic->column == 0 ? 0 : diagnostic->column - 1;
+    if (editor->buffer->line_count > 0) {
+        size_t line_length = tide_buffer_line_length(editor->buffer, line);
+        if (column > line_length) {
+            column = line_length;
+        }
+    }
+
+    editor->cursor = (TideBufferPosition){line, column};
+    snprintf(
+        message,
+        sizeof(message),
+        "diagnostic %zu/%zu: %s: %s",
+        tide_diagnostics_current_index(diagnostics) + 1,
+        tide_diagnostics_count(diagnostics),
+        tide_diagnostic_severity_label(diagnostic->severity),
+        diagnostic->message);
+    tide_editor_set_status(editor, message);
+    return TIDE_OK;
+}
+
+static TideStatus move_to_next_diagnostic(TideWorkspace *workspace)
+{
+    if (!current_buffer_is_diagnostics(workspace) &&
+        tide_diagnostics_next(tide_workspace_diagnostics(workspace)) != TIDE_OK) {
+        TideEditor *editor = tide_workspace_current_editor(workspace);
+        if (editor != NULL) {
+            tide_editor_set_status(editor, "no diagnostics");
+        }
+        return TIDE_OK;
+    }
+
+    return jump_to_current_diagnostic(workspace);
+}
+
+static TideStatus move_to_previous_diagnostic(TideWorkspace *workspace)
+{
+    if (tide_diagnostics_previous(tide_workspace_diagnostics(workspace)) != TIDE_OK) {
+        TideEditor *editor = tide_workspace_current_editor(workspace);
+        if (editor != NULL) {
+            tide_editor_set_status(editor, "no diagnostics");
+        }
+        return TIDE_OK;
+    }
+
+    return jump_to_current_diagnostic(workspace);
+}
+
 static TideStatus run_workspace_build(TideWorkspace *workspace, const char *argument)
 {
     const char *command = build_command_text(argument);
@@ -538,7 +722,13 @@ static TideStatus run_workspace_build(TideWorkspace *workspace, const char *argu
         status = append_build_output(&output, command, &result);
     }
     if (status == TIDE_OK) {
+        status = tide_workspace_parse_diagnostics(workspace, result.output == NULL ? "" : result.output);
+    }
+    if (status == TIDE_OK) {
         status = tide_workspace_open_text(workspace, TIDE_APP_BUILD_OUTPUT_PATH, tide_string_builder_data(&output));
+    }
+    if (status == TIDE_OK && tide_diagnostics_count(tide_workspace_diagnostics_const(workspace)) > 0) {
+        status = open_diagnostics_buffer(workspace);
     }
 
     tide_task_result_free(&result);
@@ -554,6 +744,9 @@ static TideStatus run_workspace_build(TideWorkspace *workspace, const char *argu
     }
 
     tide_string_builder_free(&output);
+    if (tide_diagnostics_count(tide_workspace_diagnostics_const(workspace)) > 0) {
+        return set_build_diagnostics_status(workspace, exit_code);
+    }
     return set_build_output_status(workspace, exit_code);
 }
 
@@ -633,6 +826,18 @@ TideStatus tide_app_execute_workspace_command(TideWorkspace *workspace, const ch
 
     if (strcmp(command, "buffers") == 0) {
         return list_workspace_buffers(workspace);
+    }
+
+    if (strcmp(command, "diagnostics") == 0) {
+        return open_diagnostics_buffer(workspace);
+    }
+
+    if (strcmp(command, "dn") == 0 || strcmp(command, "diagnostic-next") == 0) {
+        return move_to_next_diagnostic(workspace);
+    }
+
+    if (strcmp(command, "dp") == 0 || strcmp(command, "diagnostic-prev") == 0) {
+        return move_to_previous_diagnostic(workspace);
     }
 
     if (strcmp(command, "bn") == 0 || strcmp(command, "next-buffer") == 0) {

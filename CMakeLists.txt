@@ -18,6 +18,7 @@ add_library(tide_core
     src/project_files.c
     src/session.c
     src/tasks.c
+    src/diagnostics.c
     src/ansi.c
     src/terminal.c
     src/app.c

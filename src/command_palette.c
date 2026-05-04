@@ -20,6 +20,9 @@ static const TideCommandDefinition catalog[] = {
     {"session-save", "save open buffers"},
     {"session-load", "load open buffers"},
     {"build", "run build command"},
+    {"diagnostics", "show build diagnostics"},
+    {"diagnostic-next", "next build diagnostic"},
+    {"diagnostic-prev", "previous build diagnostic"},
 };
 
 static int ascii_lower(int ch)

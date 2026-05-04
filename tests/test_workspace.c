@@ -119,6 +119,24 @@ static void test_open_text_adds_and_replaces_named_buffer(void)
     tide_workspace_free(&workspace);
 }
 
+static void test_workspace_owns_and_clears_diagnostics(void)
+{
+    TideWorkspace workspace;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_parse_diagnostics(
+                    &workspace,
+                    "test-workspace-diag.c:7:2: warning: be careful\n") == TIDE_OK);
+
+    TIDE_ASSERT(tide_diagnostics_count(tide_workspace_diagnostics(&workspace)) == 1);
+    TIDE_ASSERT_STR_EQ(tide_diagnostics_current(tide_workspace_diagnostics(&workspace))->path, "test-workspace-diag.c");
+
+    TIDE_ASSERT(tide_workspace_parse_diagnostics(&workspace, "clean build\n") == TIDE_OK);
+    TIDE_ASSERT(tide_diagnostics_count(tide_workspace_diagnostics(&workspace)) == 0);
+
+    tide_workspace_free(&workspace);
+}
+
 int main(void)
 {
     test_open_files_switches_current_buffer();
@@ -126,5 +144,6 @@ int main(void)
     test_next_and_previous_wrap();
     test_growth_keeps_editor_buffer_pointers_valid();
     test_open_text_adds_and_replaces_named_buffer();
+    test_workspace_owns_and_clears_diagnostics();
     return 0;
 }
