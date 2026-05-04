@@ -79,6 +79,24 @@ static void test_full_render_emits_reverse_style(void)
     tide_screen_free(&screen);
 }
 
+static void test_full_render_trims_invisible_trailing_spaces(void)
+{
+    TideScreen screen;
+    TideStringBuilder out;
+
+    TIDE_ASSERT(tide_screen_init(&screen, 6, 2) == TIDE_OK);
+    TIDE_ASSERT(tide_string_builder_init(&out) == TIDE_OK);
+    TIDE_ASSERT(tide_screen_set(&screen, 0, 0, tide_cell_make('X', TIDE_COLOR_DEFAULT, TIDE_COLOR_DEFAULT, TIDE_STYLE_NONE)) == TIDE_OK);
+
+    TIDE_ASSERT(tide_ansi_render_full(&screen, &out) == TIDE_OK);
+
+    TIDE_ASSERT(strstr(tide_string_builder_data(&out), "X\n") != NULL);
+    TIDE_ASSERT(strstr(tide_string_builder_data(&out), "X     \n") == NULL);
+
+    tide_string_builder_free(&out);
+    tide_screen_free(&screen);
+}
+
 static void test_dirty_render_emits_cursor_and_color(void)
 {
     TideScreen screen;
@@ -105,6 +123,7 @@ int main(void)
     test_dirty_render_marks_screen_clean();
     test_full_render_emits_color_style_and_reset();
     test_full_render_emits_reverse_style();
+    test_full_render_trims_invisible_trailing_spaces();
     test_dirty_render_emits_cursor_and_color();
     return 0;
 }

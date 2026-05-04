@@ -31,6 +31,29 @@ static int state_is_default(AnsiState state)
     return state.fg == TIDE_COLOR_DEFAULT && state.bg == TIDE_COLOR_DEFAULT && state.style == TIDE_STYLE_NONE;
 }
 
+static int cell_is_invisible_blank(TideCell cell)
+{
+    char ch = cell.ch == '\0' ? ' ' : cell.ch;
+    return ch == ' ' && cell.fg == TIDE_COLOR_DEFAULT && cell.bg == TIDE_COLOR_DEFAULT && cell.style == TIDE_STYLE_NONE;
+}
+
+static TideStatus row_visible_width(TideScreen *screen, size_t y, size_t *width)
+{
+    *width = 0;
+    for (size_t x = screen->width; x > 0; --x) {
+        TideCell cell;
+        TideStatus status = tide_screen_get(screen, x - 1, y, &cell);
+        if (status != TIDE_OK) {
+            return status;
+        }
+        if (!cell_is_invisible_blank(cell)) {
+            *width = x;
+            return TIDE_OK;
+        }
+    }
+    return TIDE_OK;
+}
+
 static TideStatus append_sgr(TideStringBuilder *out, TideCell cell, AnsiState *state)
 {
     if (attributes_equal(*state, cell)) {
@@ -116,11 +139,14 @@ TideStatus tide_ansi_hide_cursor(TideStringBuilder *out)
 TideStatus tide_ansi_render_full(TideScreen *screen, TideStringBuilder *out)
 {
     AnsiState state = {TIDE_COLOR_DEFAULT, TIDE_COLOR_DEFAULT, TIDE_STYLE_NONE};
-    TideStatus status = tide_ansi_hide_cursor(out);
+    TideStatus status = tide_string_builder_append(out, "\x1b[2J");
+    status = append_status(status, tide_ansi_hide_cursor(out));
     status = append_status(status, tide_string_builder_append(out, "\x1b[H"));
 
     for (size_t y = 0; y < screen->height && status == TIDE_OK; ++y) {
-        for (size_t x = 0; x < screen->width && status == TIDE_OK; ++x) {
+        size_t visible_width = 0;
+        status = row_visible_width(screen, y, &visible_width);
+        for (size_t x = 0; x < visible_width && status == TIDE_OK; ++x) {
             TideCell cell;
             status = tide_screen_get(screen, x, y, &cell);
             if (status == TIDE_OK) {

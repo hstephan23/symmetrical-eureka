@@ -77,9 +77,6 @@ TideStatus tide_app_render_demo(size_t width, size_t height, TideStringBuilder *
         status = draw_text(&screen, 0, height - 1, "q: quit", status_cell);
     }
     if (status == TIDE_OK) {
-        status = tide_string_builder_append(out, "\x1b[2J");
-    }
-    if (status == TIDE_OK) {
         status = tide_ansi_render_full(&screen, out);
     }
     if (status == TIDE_OK) {
