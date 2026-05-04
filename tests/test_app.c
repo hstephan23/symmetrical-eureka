@@ -569,6 +569,68 @@ static void test_build_command_reports_nonzero_exit(void)
     tide_workspace_free(&workspace);
 }
 
+static void test_run_command_opens_output_buffer_for_success(void)
+{
+    TideWorkspace workspace;
+    TideEditor *editor;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-run-start.c") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "run printf run-ok", &quit) == TIDE_OK);
+
+    editor = tide_workspace_current_editor(&workspace);
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(editor != NULL);
+    TIDE_ASSERT_STR_EQ(editor->buffer->path, "*run-output*");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[0].data, "$ printf run-ok");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[1].data, "run-ok");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[2].data, "[exit 0]");
+    TIDE_ASSERT_STR_EQ(editor->status, "run passed");
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_run_command_reports_nonzero_exit(void)
+{
+    TideWorkspace workspace;
+    TideEditor *editor;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-run-start.c") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "run printf run-fail; exit 9", &quit) == TIDE_OK);
+
+    editor = tide_workspace_current_editor(&workspace);
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT(editor != NULL);
+    TIDE_ASSERT_STR_EQ(editor->buffer->path, "*run-output*");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[1].data, "run-fail");
+    TIDE_ASSERT_STR_EQ(editor->buffer->lines[2].data, "[exit 9]");
+    TIDE_ASSERT_STR_EQ(editor->status, "run failed: exit 9");
+
+    tide_workspace_free(&workspace);
+}
+
+static void test_run_command_requires_command_text(void)
+{
+    TideWorkspace workspace;
+    int quit = 1;
+
+    TIDE_ASSERT(tide_workspace_init(&workspace) == TIDE_OK);
+    TIDE_ASSERT(tide_workspace_open_file(&workspace, "test-app-run-start.c") == TIDE_OK);
+
+    TIDE_ASSERT(tide_app_execute_workspace_command(&workspace, "run", &quit) == TIDE_OK);
+
+    TIDE_ASSERT(quit == 0);
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->buffer->path, "test-app-run-start.c");
+    TIDE_ASSERT_STR_EQ(tide_workspace_current_editor(&workspace)->status, "run command required");
+
+    tide_workspace_free(&workspace);
+}
+
 static void test_build_command_opens_diagnostics_buffer_when_diagnostics_exist(void)
 {
     TideWorkspace workspace;
@@ -699,6 +761,9 @@ int main(void)
     test_session_load_refuses_dirty_workspace();
     test_build_command_opens_output_buffer_for_success();
     test_build_command_reports_nonzero_exit();
+    test_run_command_opens_output_buffer_for_success();
+    test_run_command_reports_nonzero_exit();
+    test_run_command_requires_command_text();
     test_build_command_opens_diagnostics_buffer_when_diagnostics_exist();
     test_build_command_clears_stale_diagnostics_on_clean_output();
     test_diagnostic_next_jumps_to_current_diagnostic_source();

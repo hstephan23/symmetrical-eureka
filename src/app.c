@@ -27,6 +27,7 @@
 #define TIDE_APP_DEFAULT_SESSION_PATH ".tide-session"
 #define TIDE_APP_DEFAULT_BUILD_COMMAND "cmake --build build"
 #define TIDE_APP_BUILD_OUTPUT_PATH "*build-output*"
+#define TIDE_APP_RUN_OUTPUT_PATH "*run-output*"
 #define TIDE_APP_DIAGNOSTICS_PATH "*diagnostics*"
 
 static volatile sig_atomic_t shutdown_requested = 0;
@@ -469,7 +470,7 @@ static const char *build_command_text(const char *argument)
     return argument[0] == '\0' ? TIDE_APP_DEFAULT_BUILD_COMMAND : argument;
 }
 
-static TideStatus append_build_output(TideStringBuilder *output, const char *command, const TideTaskResult *result)
+static TideStatus append_process_output(TideStringBuilder *output, const char *command, const TideTaskResult *result)
 {
     char exit_line[32];
     int written;
@@ -497,7 +498,7 @@ static TideStatus append_build_output(TideStringBuilder *output, const char *com
     return tide_string_builder_append(output, exit_line);
 }
 
-static TideStatus set_build_output_status(TideWorkspace *workspace, int exit_code)
+static TideStatus set_process_output_status(TideWorkspace *workspace, const char *name, int exit_code)
 {
     TideEditor *editor = tide_workspace_current_editor(workspace);
 
@@ -506,14 +507,21 @@ static TideStatus set_build_output_status(TideWorkspace *workspace, int exit_cod
     }
 
     if (exit_code == 0) {
-        tide_editor_set_status(editor, "build passed");
+        char message[sizeof(editor->status)];
+        snprintf(message, sizeof(message), "%s passed", name);
+        tide_editor_set_status(editor, message);
         return TIDE_OK;
     }
 
     char message[sizeof(editor->status)];
-    snprintf(message, sizeof(message), "build failed: exit %d", exit_code);
+    snprintf(message, sizeof(message), "%s failed: exit %d", name, exit_code);
     tide_editor_set_status(editor, message);
     return TIDE_OK;
+}
+
+static TideStatus set_build_output_status(TideWorkspace *workspace, int exit_code)
+{
+    return set_process_output_status(workspace, "build", exit_code);
 }
 
 static const char *diagnostic_word(size_t count)
@@ -722,7 +730,7 @@ static TideStatus run_workspace_build(TideWorkspace *workspace, const char *argu
         output_initialized = 1;
     }
     if (status == TIDE_OK) {
-        status = append_build_output(&output, command, &result);
+        status = append_process_output(&output, command, &result);
     }
     if (status == TIDE_OK) {
         status = tide_workspace_parse_diagnostics(workspace, result.output == NULL ? "" : result.output);
@@ -751,6 +759,60 @@ static TideStatus run_workspace_build(TideWorkspace *workspace, const char *argu
         return set_build_diagnostics_status(workspace, exit_code);
     }
     return set_build_output_status(workspace, exit_code);
+}
+
+static TideStatus run_workspace_program(TideWorkspace *workspace, const char *argument)
+{
+    const char *command = skip_command_spaces(argument);
+    TideTaskResult result;
+    TideStringBuilder output;
+    int output_initialized = 0;
+    int exit_code;
+    TideStatus status;
+
+    if (command[0] == '\0') {
+        TideEditor *editor = tide_workspace_current_editor(workspace);
+        if (editor != NULL) {
+            tide_editor_set_status(editor, "run command required");
+        }
+        return TIDE_OK;
+    }
+
+    status = tide_tasks_run_shell(command, &result);
+    if (status != TIDE_OK) {
+        TideEditor *editor = tide_workspace_current_editor(workspace);
+        if (editor != NULL) {
+            tide_editor_set_status(editor, tide_status_string(status));
+        }
+        return TIDE_OK;
+    }
+
+    exit_code = result.exit_code;
+    status = tide_string_builder_init(&output);
+    if (status == TIDE_OK) {
+        output_initialized = 1;
+    }
+    if (status == TIDE_OK) {
+        status = append_process_output(&output, command, &result);
+    }
+    if (status == TIDE_OK) {
+        status = tide_workspace_open_text(workspace, TIDE_APP_RUN_OUTPUT_PATH, tide_string_builder_data(&output));
+    }
+
+    tide_task_result_free(&result);
+    if (status != TIDE_OK) {
+        TideEditor *editor = tide_workspace_current_editor(workspace);
+        if (output_initialized) {
+            tide_string_builder_free(&output);
+        }
+        if (editor != NULL) {
+            tide_editor_set_status(editor, tide_status_string(status));
+        }
+        return TIDE_OK;
+    }
+
+    tide_string_builder_free(&output);
+    return set_process_output_status(workspace, "run", exit_code);
 }
 
 static TideStatus resolve_project_open_path(const char *argument, char *out, size_t out_size)
@@ -796,6 +858,10 @@ TideStatus tide_app_execute_workspace_command(TideWorkspace *workspace, const ch
 
     if (strncmp(command, "build", 5) == 0 && (command[5] == '\0' || command[5] == ' ' || command[5] == '\t')) {
         return run_workspace_build(workspace, command + 5);
+    }
+
+    if (strncmp(command, "run", 3) == 0 && (command[3] == '\0' || command[3] == ' ' || command[3] == '\t')) {
+        return run_workspace_program(workspace, command + 3);
     }
 
     if (strncmp(command, "open", 4) == 0 && (command[4] == '\0' || command[4] == ' ' || command[4] == '\t')) {

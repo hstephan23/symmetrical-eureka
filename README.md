@@ -92,4 +92,5 @@ Command prompt:
 - `diagnostics` opens the current diagnostics list.
 - `dn` or `diagnostic-next` jumps to the next build diagnostic.
 - `dp` or `diagnostic-prev` jumps to the previous build diagnostic.
+- `run <command>` runs a command and opens the captured output in `*run-output*`.
 - Escape or Ctrl-P closes the prompt.
