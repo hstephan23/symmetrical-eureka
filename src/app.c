@@ -79,6 +79,9 @@ TideStatus tide_app_render_demo(size_t width, size_t height, TideStringBuilder *
     if (status == TIDE_OK) {
         status = tide_ansi_render_full(&screen, out);
     }
+    if (status == TIDE_OK) {
+        status = tide_ansi_show_cursor(out);
+    }
 
     tide_screen_free(&screen);
     return status;

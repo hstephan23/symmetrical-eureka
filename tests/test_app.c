@@ -25,6 +25,7 @@ static void test_demo_render_contains_title_and_status(void)
 
     TIDE_ASSERT(strstr(tide_string_builder_data(&out), "tide") != NULL);
     TIDE_ASSERT(strstr(tide_string_builder_data(&out), "q: quit") != NULL);
+    TIDE_ASSERT(strstr(tide_string_builder_data(&out), "\x1b[?25h") != NULL);
 
     tide_string_builder_free(&out);
 }
