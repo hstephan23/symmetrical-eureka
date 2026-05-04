@@ -224,5 +224,9 @@ TideStatus tide_editor_render(TideEditor *editor, TideScreen *screen)
         return status;
     }
 
+    if (screen->height < 2) {
+        return TIDE_OK;
+    }
+
     return draw_status(editor, screen);
 }

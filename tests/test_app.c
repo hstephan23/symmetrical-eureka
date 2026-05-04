@@ -47,6 +47,22 @@ static void test_editor_render_demo_contains_file_text(void)
     tide_string_builder_free(&out);
 }
 
+static void test_file_render_keeps_text_visible_in_single_row_terminal(void)
+{
+    TideStringBuilder out;
+    const char *path = "test-app-single-row.txt";
+
+    write_text_file(path, "hello\n");
+
+    TIDE_ASSERT(tide_string_builder_init(&out) == TIDE_OK);
+    TIDE_ASSERT(tide_app_render_file_demo(path, 12, 1, &out) == TIDE_OK);
+
+    TIDE_ASSERT(strstr(tide_string_builder_data(&out), "hello") != NULL);
+    TIDE_ASSERT(strstr(tide_string_builder_data(&out), "[clean]") == NULL);
+
+    tide_string_builder_free(&out);
+}
+
 static void test_write_command_saves_buffer(void)
 {
     TideBuffer buffer;
@@ -659,6 +675,7 @@ int main(void)
 {
     test_demo_render_contains_title_and_status();
     test_editor_render_demo_contains_file_text();
+    test_file_render_keeps_text_visible_in_single_row_terminal();
     test_write_command_saves_buffer();
     test_unknown_command_stays_open_and_sets_status();
     test_find_command_moves_cursor();
